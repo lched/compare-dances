@@ -19,13 +19,13 @@
 ########################################################################
 
 """
-   This sample shows how to detect a human bodies and draw their 
+   This sample shows how to detect a human bodies and draw their
    modelised skeleton in an OpenGL window
 """
 import cv2
 import sys
 import pyzed.sl as sl
-import ogl_viewer.viewer as gl
+# import ogl_viewer.viewer as gl
 import cv_viewer.tracking_viewer as cv_viewer
 import numpy as np
 import argparse
@@ -131,17 +131,17 @@ def main():
     ]
 
     # Create OpenGL viewer
-    viewer = gl.GLViewer()
-    viewer.init(
-        camera_info.camera_configuration.calibration_parameters.left_cam,
-        body_param.enable_tracking,
-        body_param.body_format,
-    )
+    # viewer = gl.GLViewer()
+    # viewer.init(
+    #     camera_info.camera_configuration.calibration_parameters.left_cam,
+    #     body_param.enable_tracking,
+    #     body_param.body_format,
+    # )
     # Create ZED objects filled in the main loop
     bodies = sl.Bodies()
     image = sl.Mat()
     key_wait = 10
-    while viewer.is_available():
+    while True:
         # Grab an image
         if zed.grab() == sl.ERROR_CODE.SUCCESS:
             # Retrieve left image
@@ -149,7 +149,7 @@ def main():
             # Retrieve bodies
             zed.retrieve_bodies(bodies, body_runtime_param)
             # Update GL view
-            viewer.update_view(image, bodies)
+            # viewer.update_view(image, bodies)
             # Update OCV view
             image_left_ocv = image.get_data()
             cv_viewer.render_2D(
@@ -171,7 +171,7 @@ def main():
                 else:
                     print("Restart")
                     key_wait = 10
-    viewer.exit()
+    # viewer.exit()
     image.free(sl.MEM.CPU)
     zed.disable_body_tracking()
     zed.disable_positional_tracking()
