@@ -19,9 +19,10 @@
 ########################################################################
 
 """
-   This sample shows how to detect a human bodies and draw their 
+   This sample shows how to detect a human bodies and draw their
    modelised skeleton in an OpenGL window
 """
+import datetime
 import cv2
 import sys
 import pyzed.sl as sl
@@ -133,7 +134,7 @@ if __name__ == "__main__":
             viewer.update_bodies(bodies)
 
     # Save data into JSON file:
-    file_sk = open("bodies.json", "w")
+    file_sk = open(f"bodies38+{datetime.now().strftime("%d%m%y-%f")}.json", "w")
     file_sk.write(json.dumps(skeleton_file_data, cls=NumpyEncoder, indent=4))
     file_sk.close()
 
