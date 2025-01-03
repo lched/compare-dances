@@ -222,3 +222,45 @@ BODY38_idx2name = {
     36: "LEFT_HAND_PINKY_1",
     37: "RIGHT_HAND_PINKY_1",
 }
+
+
+BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS = {
+    0: 0,
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
+    5: 5,
+    6: 5,
+    7: 5,
+    8: 5,  # LEFT_EAR
+    9: 5,  # RIGHT_EAR
+    10: 7,
+    11: 31,
+    12: 8,
+    13: 32,
+    14: 9,
+    15: 33,
+    16: 10,
+    17: 34,
+    18: 55,
+    19: 60,
+    20: 56,
+    21: 61,
+    22: 57,
+    23: 62,
+    24: 58,  # LEFT_BIG_TOE
+    25: 63,  # RIGHT_BIG_TOE
+    26: 58,  # LEFT_SMALL_TOE
+    27: 63,  # RIGHT_SMALL_TOE
+    28: 57,  # LEFT_HEEL
+    29: 62,  # RIGHT_HEEL
+    30: 13,
+    31: 37,
+    32: 15,
+    33: 39,
+    34: 21,
+    35: 45,
+    36: 27,
+    37: 51,
+}

@@ -9,13 +9,19 @@ import cv_viewer.tracking_viewer as cv_viewer
 
 from Motion import BVH
 from Motion.Animation import positions_global
-from utils import LIMB_CONNECTIONS, SimulatedBodies
+from utils import (
+    LIMB_CONNECTIONS,
+    SimulatedBodies,
+    BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS,
+)
 
 
 USE_ZED = False  # Set to False when you don't have a Zed 2 camera and you just want to see the movements
 IGNORE_LIST = (
     []
 )  # Joints that are not used for comparison between reference and live movements
+
+# exclude_list = [8, 9, 24, 25, 26, 27, 28, 29]
 
 
 def calculate_limb_angles(frame_landmarks):
@@ -58,7 +64,13 @@ if __name__ == "__main__":
 
     bvh_file = "dance_comparison/BP_Mixamo_New10_Scene_1_18_0_fixed.bvh"
     animation, joints_names, frametime = BVH.load(bvh_file)
-    anim_xyz = positions_global(animation) * 10 + 500
+    anim_xyz_fbx = positions_global(animation)
+    anim_xyz = np.zeros((anim_xyz_fbx.shape[0], 38, 3))
+    for body38_idx in range(38):
+        fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
+        anim_xyz[:, body38_idx] = anim_xyz_fbx[:, fbx_idx]
+
+    anim_xyz = anim_xyz * 50 + 500
     bvh_timestamps = np.arange(0, anim_xyz.shape[0], frametime) * 1000
     ref_timestamps = bvh_timestamps
 
@@ -176,7 +188,7 @@ if __name__ == "__main__":
                 for j in range(len(LIMB_CONNECTIONS))
             ]
             score = np.mean(frame_diff)
-        cv2.imshow("2D View", image_render)
+        cv2.imshow("2D View", np.flipud(image_render))
         # current_ref_frame_idx = (current_ref_frame_idx + 1) % n_ref_frames  # will loop
 
         key = cv2.waitKey(key_wait)
