@@ -144,9 +144,13 @@ async def keypoints_visualizer(websocket):
         async for message in websocket:
             print("Message received!")
             # Decode the JSON message
-            data = json.loads(message)
+            print("Message received!")
+            mapped_frame = np.zeros((38, 3))
+            for body38_idx in range(38):
+                fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
+                mapped_frame[:, body38_idx] = message[:, fbx_idx]
             with frame_lock:  # Synchronize access to received_frame
-                received_frame = data["body_list"][0]["keypoint"]
+                received_frame = mapped_frame.copy()
     except websockets.ConnectionClosed:
         print("WebSocket connection closed.")
 
