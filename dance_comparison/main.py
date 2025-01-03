@@ -133,8 +133,11 @@ async def keypoints_visualizer(websocket):
     """Receive and visualize motion data from WebSocket."""
     try:
         async for message in websocket:
-            print("Message received: ", message)
-            # Process message here (e.g., parse JSON)
+            print("Message received!")
+            received_frame = np.zeros((38, 3))
+            for body38_idx in range(38):
+                fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
+                received_frame[:, body38_idx] = message[:, fbx_idx]
     except websockets.ConnectionClosed:
         print("WebSocket connection closed.")
 
