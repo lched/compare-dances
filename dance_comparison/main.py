@@ -1,7 +1,7 @@
 import asyncio
 import threading
 import websockets
-
+import json  # To handle JSON messages
 import cv2
 import numpy as np
 import time
@@ -18,6 +18,10 @@ from utils import (
 WEBSOCKET_PORT = 8000
 REFERENCE_FILE = "dance_comparison/BP_Mixamo_New10_Scene_1_18_0_fixed.bvh"
 IGNORE_LIST = []  # Joints not used for comparison [8, 9, 24, 25, 26, 27, 28, 29]
+
+# Shared variables
+received_frame = None  # Shared received frame
+frame_lock = threading.Lock()  # Lock for synchronizing access to received_frame
 
 
 def calculate_limb_angles(frame_landmarks):
@@ -62,6 +66,8 @@ def extract_ref_motion_data(fname):
 
 def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_height):
     """Real-time rendering of reference and received animation frames."""
+    global received_frame  # Use the shared received_frame
+
     key_wait = 10
     current_ref_frame_idx = 0
     current_ref_timestamp = 0
@@ -80,8 +86,9 @@ def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_hei
         # Create an empty image
         image = np.zeros((frame_height, frame_width, 4), dtype=np.uint8)
 
-        # Simulated received bodies (to be replaced with actual WebSocket data)
-        received_bodies = SimulatedBodies(ref_frames[current_ref_frame_idx])
+        # Get the received frame (synchronized)
+        with frame_lock:
+            received_bodies = SimulatedBodies(received_frame) if received_frame else None
 
         # Reference body keypoint
         ref_bodies = SimulatedBodies(ref_frames[current_ref_frame_idx])
@@ -90,11 +97,12 @@ def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_hei
         cv_viewer.render_2D(
             image,
             image_scale,
-            received_bodies.body_list,
+            received_bodies.body_list if received_bodies else [],
+            ref_bodies.body_list,
         )
 
         # Calculate score and display it
-        if len(ref_bodies.body_list) and len(received_bodies.body_list) > 0:
+        if len(ref_bodies.body_list) > 0 and received_bodies and len(received_bodies.body_list) > 0:
             frame_angles = calculate_limb_angles(
                 received_bodies.body_list[0].keypoint_2d
             )
@@ -131,13 +139,14 @@ def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_hei
 
 async def keypoints_visualizer(websocket):
     """Receive and visualize motion data from WebSocket."""
+    global received_frame  # Use the shared received_frame
     try:
         async for message in websocket:
             print("Message received!")
-            received_frame = np.zeros((38, 3))
-            for body38_idx in range(38):
-                fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
-                received_frame[:, body38_idx] = message[:, fbx_idx]
+            # Decode the JSON message
+            data = json.loads(message)
+            with frame_lock:  # Synchronize access to received_frame
+                received_frame = data["body_list"][0]["keypoint"]
     except websockets.ConnectionClosed:
         print("WebSocket connection closed.")
 

@@ -48,7 +48,7 @@ def render_sk(left_display, img_scale, obj, color, BODY_BONES):
             cv2.circle(left_display, (int(cv_kp[0]), int(cv_kp[1])), 3, color, -1)
 
 
-def render_2D(left_display, img_scale, objects):
+def render_2D(left_display, img_scale, objects, ref_objects):
     """
     Parameters
         left_display (np.array): numpy array containing image data (image shape is for instance (720, 1280, 4))
@@ -59,6 +59,12 @@ def render_2D(left_display, img_scale, objects):
 
     # Render skeleton joints and bones
     for obj in objects:
+        if len(obj.keypoint_2d) > 0:
+            color = generate_color_id_u(obj.id)
+            render_sk(left_display, img_scale, obj, color, sl.BODY_38_BONES)
+    cv2.addWeighted(left_display, 0.9, overlay, 0.1, 0.0, left_display)
+
+    for obj in ref_objects:
         if len(obj.keypoint_2d) > 0:
             color = generate_color_id_u(obj.id)
             render_sk(left_display, img_scale, obj, color, sl.BODY_38_BONES)
