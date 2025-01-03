@@ -87,7 +87,6 @@ class NumpyEncoder(json.JSONEncoder):
 
 
 if __name__ == "__main__":
-
     # common parameters
     init_params = sl.InitParameters()
     init_params.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP
@@ -128,13 +127,14 @@ if __name__ == "__main__":
     while viewer.is_available():
         if zed.grab() == sl.ERROR_CODE.SUCCESS:
             zed.retrieve_bodies(bodies)
-            skeleton_file_data[str(bodies.timestamp.get_milliseconds())] = (
-                serializeBodies(bodies)
-            )
+            skeleton_file_data[
+                str(bodies.timestamp.get_milliseconds())
+            ] = serializeBodies(bodies)
             viewer.update_bodies(bodies)
 
     # Save data into JSON file:
-    file_sk = open(f"bodies38+{datetime.now().strftime("%d%m%y-%f")}.json", "w")
+    timestring = datetime.now().strftime("%d%m%y-%f")
+    file_sk = open(f"bodies38+{timestring}.json", "w")
     file_sk.write(json.dumps(skeleton_file_data, cls=NumpyEncoder, indent=4))
     file_sk.close()
 

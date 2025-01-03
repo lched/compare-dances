@@ -3,13 +3,14 @@ from enum import Enum
 
 class SimulatedBodyData:
     def __init__(self, body_info):
-        self.id = body_info["id"]
-        self.position = body_info["position"]
-        self.bounding_box_2d = body_info["bounding_box_2d"]
+        # self.id = body_info["id"]
+        self.id = 0
+        # self.position = body_info["position"]
+        # self.bounding_box_2d = body_info["bounding_box_2d"]
         self.keypoints = body_info["keypoint"]
         self.keypoint_2d = body_info["keypoint_2d"]
-        self.keypoint_confidences = body_info["keypoint_confidence"]
-        self.tracking_state = body_info["tracking_state"]
+        # self.keypoint_confidences = body_info["keypoint_confidence"]
+        # self.tracking_state = body_info["tracking_state"]
 
 
 class SimulatedBodies:
