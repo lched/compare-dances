@@ -223,7 +223,7 @@ def load(filename, start=None, end=None, order=None, world=True):
 def save(
     filename: str,
     anim: Animation,
-    names: list[str] = None,
+    names=None,
     frametime=1.0 / 24.0,
     order="xyz",
     positions=False,

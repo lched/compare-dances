@@ -88,7 +88,6 @@ class NumpyEncoder(json.JSONEncoder):
 
 
 if __name__ == "__main__":
-
     # common parameters
     init_params = sl.InitParameters()
     init_params.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP
@@ -141,9 +140,9 @@ if __name__ == "__main__":
         if zed.grab() == sl.ERROR_CODE.SUCCESS:
             zed.retrieve_image(image, sl.VIEW.LEFT, sl.MEM.CPU, display_resolution)
             zed.retrieve_bodies(bodies)
-            skeleton_file_data[str(bodies.timestamp.get_milliseconds())] = (
-                serializeBodies(bodies)
-            )
+            skeleton_file_data[
+                str(bodies.timestamp.get_milliseconds())
+            ] = serializeBodies(bodies)
             # viewer.update_bodies(bodies)
             image_left_ocv = image.get_data()
             cv_viewer.render_2D(
