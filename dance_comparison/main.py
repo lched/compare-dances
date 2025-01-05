@@ -20,7 +20,8 @@ from utils import (
 WEBSOCKET_PORT = 8000
 MOVING_AVERAGE_LENGTH = 10
 REFERENCE_FILE = "dance_comparison/BP_Mixamo_New10_Scene_1_18_0_fixed.bvh"
-IGNORE_LIST = [8, 9, 24, 25, 26, 27, 28, 29]  # Joints not used for comparison
+IGNORE_LIST = [8, 9, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37]  # Keypoints not used for comparison
+# See in utils.py for keypoints names and related indices
 
 # Shared variables
 received_frame = None  # Shared received frame
