@@ -50,14 +50,16 @@ def extract_ref_motion_data(fname):
     for body38_idx in range(38):
         fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
         anim_xyz[:, body38_idx] = anim_xyz_fbx[:, fbx_idx]
-
-    anim_xyz = anim_xyz * 50 + 500
     ref_timestamps = np.arange(0, anim_xyz.shape[0], frametime) * 1000
 
     anim_xyz2d = anim_xyz[:, :, [0, 1]]
 
     ref_frames = [
-        {"body_list": [{"keypoint": np.array(frame3d), "keypoint_2d": np.array(frame2d)}]}
+        {
+            "body_list": [
+                {"keypoint": np.array(frame3d), "keypoint_2d": np.array(frame2d)}
+            ]
+        }
         for frame3d, frame2d in zip(anim_xyz, anim_xyz2d)
     ]
 
@@ -90,8 +92,17 @@ def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_hei
         received_bodies = None
         with frame_lock:
             if received_frame is not None:
-                received_frame = np.array(received_frame) * 50 + 500
-                received_bodies = SimulatedBodies({"body_list": [{"keypoint": received_frame, "keypoint_2d": received_frame[:, [0, 1]]}]})
+                received_frame = np.array(received_frame)
+                received_bodies = SimulatedBodies(
+                    {
+                        "body_list": [
+                            {
+                                "keypoint": received_frame,
+                                "keypoint_2d": received_frame[:, [0, 1]],
+                            }
+                        ]
+                    }
+                )
 
         # Reference body keypoint
         try:
@@ -123,22 +134,27 @@ def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_hei
                 abs(ref_angles[j] - frame_angles[j]) / 180
                 for j in range(len(LIMB_CONNECTIONS))
             ]
-            # score = np.mean(frame_diff)
+            score = np.mean(frame_diff)
+            color = (0, 255, 0, 255)  # Color Green
+        else:
+            score = -1
+            color = (0, 0, 255, 255)  # Color Red
 
-            # Display score on the viewer
-            # cv2.putText(
-            #     image,
-            #     f"Score: {score:.2f}",
-            #     (50, 50),  # Position (x, y)
-            #     cv2.FONT_HERSHEY_SIMPLEX,  # Font type
-            #     1,  # Font scale
-            #     (0, 255, 0, 255),  # Color (Green in RGBA)
-            #     2,  # Thickness
-            #     cv2.LINE_AA,  # Line type
-            # )
+        # Display score on the viewer
+        image = np.ascontiguousarray(np.flipud(image))
+        cv2.putText(
+            image,
+            f"Score: {score:.2f}",
+            (50, 50),  # Position (x, y)
+            cv2.FONT_HERSHEY_SIMPLEX,  # Font type
+            1,  # Font scale
+            color,  # Color (Green in RGBA)
+            1,  # Thicknessq
+            cv2.LINE_AA,  # Line type
+        )
 
         # Display the image
-        cv2.imshow("2D View", np.flipud(image))
+        cv2.imshow("2D View", image)
         key = cv2.waitKey(key_wait)
         if key == 113:  # 'q' key
             print("Exiting...")
@@ -155,17 +171,25 @@ async def keypoints_visualizer(websocket):
     try:
         async for message in websocket:
             print("Message received!")
-            # Decode the JSON message
-            message = '{' + message[:-1] + '}'
-            message = json.loads(message)
-            print("Message decoded!")
-            mapped_frame = np.zeros((38, 3))
-            for body38_idx in range(38):
-                fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]  # if needs mapping
-                # fbx_idx = body38_idx  # if already BODY38 format
-                mapped_frame[body38_idx] = message[f"bone{fbx_idx}"]
-            with frame_lock:  # Synchronize access to received_frame
-                received_frame = mapped_frame.copy()
+            try:
+                message = json.loads(message)
+            except:
+                # Decode the JSON message
+                message = "{" + message[:-1] + "}"
+                message = json.loads(message)
+            if "type" in message.keys() and message["type"] == "ping":
+                print("that was a ping!")
+            else:
+                print("Message decoded!")
+                mapped_frame = np.zeros((38, 3))
+                for body38_idx in range(38):
+                    fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[
+                        body38_idx
+                    ]  # if needs mapping
+                    # fbx_idx = body38_idx  # if already BODY38 format
+                    mapped_frame[body38_idx] = message[f"bone{fbx_idx}"]
+                with frame_lock:  # Synchronize access to received_frame
+                    received_frame = mapped_frame.copy()
     except websockets.ConnectionClosed:
         print("WebSocket connection closed.")
 
@@ -186,6 +210,7 @@ if __name__ == "__main__":
 
     # Frame properties
     image_scale = [2 / 3, 2 / 3]
+    # image_scale = [1, 1]
     frame_width, frame_height = [1280, 720]
 
     # Start WebSocket server in a separate thread
