@@ -87,22 +87,36 @@ def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_hei
         image = np.zeros((frame_height, frame_width, 4), dtype=np.uint8)
 
         # Get the received frame (synchronized)
+        received_bodies = None
         with frame_lock:
-            received_bodies = SimulatedBodies(received_frame) if received_frame else None
+            if received_frame is not None:
+                receivedBodiesList = [
+                    {"body_list": [{"keypoint": received_frame, "keypoint_2d": None}]}
+                ]
+                received_bodies = SimulatedBodies(receivedBodiesList)
 
         # Reference body keypoint
-        ref_bodies = SimulatedBodies(ref_frames[current_ref_frame_idx])
+        try:
+            ref_bodies = SimulatedBodies(ref_frames[current_ref_frame_idx])
+        except IndexError:
+            print("Looping animation...")
+            current_ref_frame_idx = 0
+            ref_bodies = SimulatedBodies(ref_frames[current_ref_frame_idx])
 
         # Update viewer
         cv_viewer.render_2D(
             image,
             image_scale,
-            received_bodies.body_list if received_bodies else [],
+            received_bodies.body_list if received_bodies is not None else [],
             ref_bodies.body_list,
         )
 
         # Calculate score and display it
-        if len(ref_bodies.body_list) > 0 and received_bodies and len(received_bodies.body_list) > 0:
+        if (
+            len(ref_bodies.body_list) > 0
+            and received_bodies
+            and len(received_bodies.body_list) > 0
+        ):
             frame_angles = calculate_limb_angles(
                 received_bodies.body_list[0].keypoint_2d
             )
@@ -144,11 +158,13 @@ async def keypoints_visualizer(websocket):
         async for message in websocket:
             print("Message received!")
             # Decode the JSON message
-            print("Message received!")
+            message = json.loads(message)
+            print("Message decoded!")
             mapped_frame = np.zeros((38, 3))
             for body38_idx in range(38):
-                fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
-                mapped_frame[:, body38_idx] = message[:, fbx_idx]
+                # fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]  # if needs mapping
+                fbx_idx = body38_idx  # if already BODY38 format
+                mapped_frame[body38_idx] = message[f"bone{fbx_idx}"]
             with frame_lock:  # Synchronize access to received_frame
                 received_frame = mapped_frame.copy()
     except websockets.ConnectionClosed:
