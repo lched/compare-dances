@@ -20,7 +20,7 @@ from utils import (
 WEBSOCKET_PORT = 8000
 MOVING_AVERAGE_LENGTH = 10
 REFERENCE_FILE = "dance_comparison/BP_Mixamo_New10_Scene_1_18_0_fixed.bvh"
-IGNORE_LIST = []  # Joints not used for comparison [8, 9, 24, 25, 26, 27, 28, 29]
+IGNORE_LIST = [8, 9, 24, 25, 26, 27, 28, 29]  # Joints not used for comparison
 
 # Shared variables
 received_frame = None  # Shared received frame
@@ -133,12 +133,17 @@ def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_hei
                 received_bodies.body_list[0].keypoint_2d
             )
             ref_angles = calculate_limb_angles(ref_bodies.body_list[0].keypoint_2d)
-            frame_diff = [
+
+            # Filter out differences by ignoring indices in IGNORE_LIST
+            filtered_diff = [
                 abs(ref_angles[j] - frame_angles[j]) / 180
                 for j in range(len(LIMB_CONNECTIONS))
+                if j not in IGNORE_LIST  # Skip indices in IGNORE_LIST
             ]
-            current_score = np.mean(frame_diff)
-            color = (0, 255, 0, 255)  # Color Green
+
+            # Compute the current score only with the filtered differences
+            current_score = np.mean(filtered_diff)
+            color = (0, 255, 0)  # Color Green
         else:
             current_score = -1
             color = (0, 0, 255, 255)  # Color Red
@@ -152,7 +157,7 @@ def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_hei
         image = np.ascontiguousarray(np.flipud(image))
         cv2.putText(
             image,
-            f"Score: {current_score:.2f}",
+            f"Score: {smoothed_score:.2f}",
             (50, 50),  # Position (x, y)
             cv2.FONT_HERSHEY_SIMPLEX,  # Font type
             1,  # Font scale
