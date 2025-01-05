@@ -111,7 +111,7 @@ def render_2D(left_display, img_scale, objects, ref_objects):
             )
 
             # Render the skeleton
-            color = generate_color_id_u(obj.id)
+            color = generate_color_id_u(0)
             render_sk(left_display, img_scale, obj, color, sl.BODY_38_BONES)
 
     # Render skeleton joints and bones for reference objects
@@ -127,7 +127,7 @@ def render_2D(left_display, img_scale, objects, ref_objects):
             )
 
             # Render the skeleton
-            color = generate_color_id_u(obj.id)
+            color = generate_color_id_u(1)
             render_sk(left_display, img_scale, obj, color, sl.BODY_38_BONES)
 
     # Blend the overlay
