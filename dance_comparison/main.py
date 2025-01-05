@@ -1,5 +1,7 @@
 import asyncio
 import threading
+from collections import deque
+
 import websockets
 import json  # To handle JSON messages
 import cv2
@@ -16,6 +18,7 @@ from utils import (
 )
 
 WEBSOCKET_PORT = 8000
+MOVING_AVERAGE_LENGTH = 10
 REFERENCE_FILE = "dance_comparison/BP_Mixamo_New10_Scene_1_18_0_fixed.bvh"
 IGNORE_LIST = []  # Joints not used for comparison [8, 9, 24, 25, 26, 27, 28, 29]
 
@@ -74,7 +77,7 @@ def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_hei
     current_ref_frame_idx = 0
     current_ref_timestamp = 0
     start_time = time.time()
-
+    score_queue = deque(maxlen=MOVING_AVERAGE_LENGTH)
     while True:
         elapsed_time = (time.time() - start_time) * 1000
         try:
@@ -134,17 +137,22 @@ def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_hei
                 abs(ref_angles[j] - frame_angles[j]) / 180
                 for j in range(len(LIMB_CONNECTIONS))
             ]
-            score = np.mean(frame_diff)
+            current_score = np.mean(frame_diff)
             color = (0, 255, 0, 255)  # Color Green
         else:
-            score = -1
+            current_score = -1
             color = (0, 0, 255, 255)  # Color Red
+        # Add the current score to the queue
+        score_queue.append(current_score)
+
+        # Compute the smoothed score as the average of the scores in the queue
+        smoothed_score = np.mean(score_queue)
 
         # Display score on the viewer
         image = np.ascontiguousarray(np.flipud(image))
         cv2.putText(
             image,
-            f"Score: {score:.2f}",
+            f"Score: {current_score:.2f}",
             (50, 50),  # Position (x, y)
             cv2.FONT_HERSHEY_SIMPLEX,  # Font type
             1,  # Font scale
