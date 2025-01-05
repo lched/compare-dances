@@ -158,6 +158,7 @@ async def keypoints_visualizer(websocket):
         async for message in websocket:
             print("Message received!")
             # Decode the JSON message
+            message = '{' + message[:-1] + '}'
             message = json.loads(message)
             print("Message decoded!")
             mapped_frame = np.zeros((38, 3))
