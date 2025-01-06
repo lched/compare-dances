@@ -278,15 +278,12 @@ def extract_ref_motion_data(
 ):
     """Extract motion data from the BVH reference file."""
     animation, joints_names, frametime = BVH.load(fname)
-    anim_xyz_fbx = positions_global(animation)
-    anim_xyz = np.zeros((anim_xyz_fbx.shape[0], 38, 3))
+    bvh_global_position = positions_global(animation)
+    ref_motion = np.zeros((bvh_global_position.shape[0], 38, 3))
     for body38_idx in range(38):
-        fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
-        anim_xyz[:, body38_idx] = anim_xyz_fbx[:, fbx_idx]
-    anim_xyz2d = anim_xyz[:, :, [0, 1]]
-
-    ref_frames = {"keypoint": np.array(anim_xyz), "keypoint_2d": np.array(anim_xyz2d)}
-    return ref_frames, frametime
+        bvh_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
+        ref_motion[:, body38_idx] = bvh_global_position[:, bvh_idx]
+    return ref_motion, frametime
 
 
 def calculate_limb_angles(frame_landmarks):
