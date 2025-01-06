@@ -65,16 +65,23 @@ def compute_energy_of_ref_file(motion_frames):
     return energy
 
 
+def compute_angles_frame(frame, angle_indices):
+    """For a single frame"""
+    angles = np.zeros(len(angle_indices))
+    for i, (A_idx, B_idx, C_idx) in enumerate(angle_indices):
+        A = frame[A_idx]
+        B = frame[B_idx]
+        C = frame[C_idx]
+        angles[i] = angle_between_points(A, B, C)
+    return angles
+
+
 def compute_angles_of_ref_file(motion_frames, angle_indices):
-    """
+    """For lots of frames
     motion_frames shape ()
     angle_indices list of Tuples of 3 indices that make the angles we want to monitor
     """
     angles = np.zeros((motion_frames.shape[0], len(angle_indices)))
     for i in range(len(motion_frames)):
-        for j, (A_idx, B_idx, C_idx) in enumerate(angle_indices):
-            A = motion_frames[i][A_idx]
-            B = motion_frames[i][B_idx]
-            C = motion_frames[i][C_idx]
-            angles[i][j] = angle_between_points(A, B, C)
+        angles[i] = compute_angles_frame(motion_frames, angle_indices)
     return angles

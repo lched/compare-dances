@@ -22,6 +22,7 @@ from pythonosc.osc_server import AsyncIOOSCUDPServer
 from score import (
     compute_energy_of_ref_file,
     compute_angles_of_ref_file,
+    compute_angles_frame,
     are_angles_close,
 )
 from utils import (
@@ -34,6 +35,7 @@ from utils import (
 
 # DIFFICULTY SETTINGS
 ANGLES_TOLERANCE = 20  # in degrees
+SEND_RESULTS_EVERY = 0
 
 
 # DATA ABOUT CURRENT LEVEL
@@ -75,7 +77,7 @@ ANGLES_USED_FOR_SCORE = (
     ]
 )
 
-
+# Client to senc OSC messages back to Unreal
 client = SimpleUDPClient(OSC_IP, OSC_CLIENT_PORT)  # Create an OSC client
 
 
@@ -86,11 +88,12 @@ def answer_ping(address, *args):
 
 def load_level(address, *args):
     """args[0] is an int that indicates the level"""
-    global REF_MOTION, REF_FRAMETIME, REF_ENERGY, REF_ANGLES
+    global REF_MOTION, REF_FRAMETIME, REF_ENERGY, REF_ANGLES, CURRENT_LEVEL_IDX
 
-    # if CURRENT_LEVEL_IDX == args[0]:
-    #     print("Level already loaded")
-    #     return
+    if CURRENT_LEVEL_IDX and CURRENT_LEVEL_IDX == args[0]:
+        print(f"Level already loaded {IDX_TO_MOTION_FILES[args[0]]}")
+        return
+    CURRENT_LEVEL_IDX = args[0]
     REF_MOTION, REF_FRAMETIME = extract_ref_motion_data(IDX_TO_MOTION_FILES[args[0]])
 
     # Compute energy of the keyframes selected in JOINTS_USED_FOR_ENERGY
@@ -105,27 +108,30 @@ def load_level(address, *args):
 
 def process_and_send_data(address, *args):
     """Receive data via OSC, compute metrics, and send results back."""
-    global REF_FRAME_IDX
+    global REF_FRAME_IDX, left_hand_history, right_hand_history, prev_left_hand_velocity, prev_right_hand_velocity, last_left_hand_frame, last_right_hand_frame
     start_time = time.time()
+    if REF_MOTION is None:
+        print("No level loaded! Skipping analysis")
+        return
     try:
         timestamp = args[-1]  # in ms
         print(timestamp)
-        if REF_FRAMETIME and REF_MOTION:
+        if REF_FRAMETIME is not None and REF_MOTION is not None:
             reference_frame_index = int(timestamp / REF_FRAMETIME) % len(REF_MOTION)
         if reference_frame_index != REF_FRAME_IDX:
             REF_FRAME_IDX = reference_frame_index
-        data = np.array(args[1:])
+        data = np.array(args[:-4]).reshape(-1, 3)
 
         # Map incoming data to BODY38 format
         spectator_frame = np.zeros((38, 3))
         for body38_idx in range(38):
             fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
-            spectator_frame[body38_idx] = data[f"bone{fbx_idx}"]
+            spectator_frame[body38_idx] = data[fbx_idx]
 
         # Filter out duplicate frames
-        if (spectator_frame[34] == last_left_hand_frame).all() and (
-            spectator_frame[35] == last_right_hand_frame
-        ).all():
+        if np.array_equal(spectator_frame[34], last_left_hand_frame) and np.array_equal(
+            spectator_frame[35], last_right_hand_frame
+        ):
             return
 
         # Update last seen frames
@@ -169,17 +175,15 @@ def process_and_send_data(address, *args):
                 ) / dt
                 prev_right_hand_velocity = right_hand_velocity
 
-        # Synchronize with the reference frame
-        reference_frame = REF_MOTION[REF_FRAMETIME]
+        # # Synchronize with the reference frame
+        # reference_frame = REF_MOTION[reference_frame_index]
 
         # # Compute similarity to reference frame
         spectator_energy = (
             np.mean((np.abs(right_hand_acceleration), np.abs(left_hand_acceleration)))
             ** 2
         )
-        spectator_angles = compute_angles_of_ref_file(
-            spectator_frame, ANGLES_USED_FOR_SCORE
-        )
+        spectator_angles = compute_angles_frame(spectator_frame, ANGLES_USED_FOR_SCORE)
 
         # Prepare the data to send back to the client
         result = {
