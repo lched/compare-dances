@@ -107,28 +107,29 @@ def process_and_send_data(address, *args):
 
     start_time = time.time()
     try:
-        timestamp = args[0]
+        timestamp = args[0]  # in seconds
+        print(timestamp)
         data = np.array(args[1:])
         # Map incoming data to BODY38 format
-        incoming_frame = np.zeros((38, 3))
+        spectator_frame = np.zeros((38, 3))
         for body38_idx in range(38):
             fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
-            incoming_frame[body38_idx] = data[f"bone{fbx_idx}"]
+            spectator_frame[body38_idx] = data[f"bone{fbx_idx}"]
 
         # Filter out duplicate frames
-        if (incoming_frame[34] == last_left_hand_frame).all() and (
-            incoming_frame[35] == last_right_hand_frame
+        if (spectator_frame[34] == last_left_hand_frame).all() and (
+            spectator_frame[35] == last_right_hand_frame
         ).all():
             return
 
         # Update last seen frames
-        last_left_hand_frame = incoming_frame[34]
-        last_right_hand_frame = incoming_frame[35]
+        last_left_hand_frame = spectator_frame[34]
+        last_right_hand_frame = spectator_frame[35]
 
         # Extract positions of hands
         current_time = time.time() - start_time
-        left_hand_position = incoming_frame[34, [1, 2]]  # LEFT_HAND_MIDDLE_4
-        right_hand_position = incoming_frame[35, [1, 2]]  # RIGHT_HAND_MIDDLE_4
+        left_hand_position = spectator_frame[34, [1, 2]]  # LEFT_HAND_MIDDLE_4
+        right_hand_position = spectator_frame[35, [1, 2]]  # RIGHT_HAND_MIDDLE_4
 
         # Track position history
         left_hand_history.append((left_hand_position, current_time))
@@ -167,30 +168,24 @@ def process_and_send_data(address, *args):
         reference_frame = REF_MOTION[reference_frame_index]
 
         # # Compute similarity to reference frame
-        # incoming_angles = calculate_limb_angles(mapped_frame)
-        # ref_angles = calculate_limb_angles(reference_frame)
-        # # Filter out differences by ignoring indices in IGNORE_LIST
-        # filtered_diff = [
-        #     abs(ref_angles[j] - incoming_angles[j]) / 180
-        #     for j in range(len(LIMB_CONNECTIONS))
-        #     if j not in IGNORE_LIST  # Skip indices in IGNORE_LIST
-        # ]
-        incoming_energy = np.abs() ** 2
-        incoming_angles = compute_angles_of_ref_file(
-            incoming_frame, ANGLES_USED_FOR_SCORE
+        spectator_energy = (
+            np.mean((np.abs(right_hand_acceleration), np.abs(left_hand_acceleration)))
+            ** 2
         )
-        are_they_close_tho = are_angles_close(
-            incoming_angles, REF_ANGLES, ANGLES_TOLERANCE
+        spectator_angles = compute_angles_of_ref_file(
+            spectator_frame, ANGLES_USED_FOR_SCORE
         )
 
         # Prepare the data to send back to the client
         result = {
             "reference_energy": REF_ENERGY[reference_frame_index],
-            "spectator_energy": 0,
+            "spectator_energy": spectator_energy,
             "reference_angles": REF_ANGLES[reference_frame_index],
-            "spectator_angles": incoming_angles,
-            "is_close_energy": 0,
-            "is_close_angles": are_they_close_tho.tolist(),
+            "spectator_angles": spectator_angles,
+            "is_close_energy": -1,
+            "is_close_angles": are_angles_close(
+                spectator_angles, REF_ANGLES, ANGLES_TOLERANCE
+            ).tolist(),
         }
         client.send_message("/result", json.dumps(result))
         print("Sent data")
