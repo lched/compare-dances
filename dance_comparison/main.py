@@ -84,15 +84,6 @@ def answer_ping(address, *args):
     client.send_message("/answer", json.dumps("pong"))
 
 
-def set_ref_frame_idx(address, *args):
-    global REF_FRAME_IDX
-    print(args[0])
-    if REF_FRAMETIME and REF_MOTION:
-        reference_frame_index = int(args[0] / REF_FRAMETIME) % len(REF_MOTION)
-    if reference_frame_index != REF_FRAME_IDX:
-        REF_FRAME_IDX = reference_frame_index
-
-
 def load_level(address, *args):
     """args[0] is an int that indicates the level"""
     global REF_MOTION, REF_FRAMETIME, REF_ENERGY, REF_ANGLES
@@ -114,12 +105,17 @@ def load_level(address, *args):
 
 def process_and_send_data(address, *args):
     """Receive data via OSC, compute metrics, and send results back."""
-    return 0
+    global REF_FRAME_IDX
     start_time = time.time()
     try:
-        timestamp = args[0]  # in seconds
+        timestamp = args[-1]  # in ms
         print(timestamp)
+        if REF_FRAMETIME and REF_MOTION:
+            reference_frame_index = int(timestamp / REF_FRAMETIME) % len(REF_MOTION)
+        if reference_frame_index != REF_FRAME_IDX:
+            REF_FRAME_IDX = reference_frame_index
         data = np.array(args[1:])
+
         # Map incoming data to BODY38 format
         spectator_frame = np.zeros((38, 3))
         for body38_idx in range(38):
@@ -212,9 +208,6 @@ async def main():
     dispatcher.map("/data*", process_and_send_data)
     dispatcher.map("/level", load_level)
     dispatcher.map("/ping", answer_ping)
-    dispatcher.map(
-        "/timestamp", set_ref_frame_idx
-    )
 
     server = AsyncIOOSCUDPServer(
         (OSC_IP, OSC_PORT), dispatcher, asyncio.get_event_loop()
