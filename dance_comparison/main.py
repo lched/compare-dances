@@ -1,169 +1,224 @@
 import asyncio
+import json
 import threading
 from collections import deque
 
-import websockets
-import json  # To handle JSON messages
 import cv2
 import numpy as np
 import time
+import websockets
 
 import cv_viewer.tracking_viewer as cv_viewer
-from Motion import BVH
-from Motion.Animation import positions_global
 from utils import (
-    LIMB_CONNECTIONS,
-    SimulatedBodies,
     BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS,
+    extract_ref_motion_data,
+    IDX_TO_MOTION_FILES,
+    LIMB_CONNECTIONS,
+    calculate_limb_angles,
 )
 
+USE_3D = False  # TODO
+CV_VIEWER = False
 WEBSOCKET_PORT = 8000
-MOVING_AVERAGE_LENGTH = 10
-REFERENCE_FILE = "dance_comparison/BP_Mixamo_New10_Scene_1_18_0_fixed.bvh"
-IGNORE_LIST = [8, 9, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37]  # Keypoints not used for comparison
-# See in utils.py for keypoints names and related indices
-
-# Shared variables
-received_frame = None  # Shared received frame
-frame_lock = threading.Lock()  # Lock for synchronizing access to received_frame
-
-
-def calculate_limb_angles(frame_landmarks):
-    """Calculate limb angles for each frame."""
-    limb_angles = []
-    for start, end in LIMB_CONNECTIONS:
-        try:
-            start_point = np.array(frame_landmarks[start.value])
-            end_point = np.array(frame_landmarks[end.value])
-
-            dx = end_point[0] - start_point[0]
-            dy = end_point[1] - start_point[1]
-            angle = np.degrees(np.arctan2(dx, dy))
-            angle = abs(angle) if angle <= 180 else 360 - abs(angle)
-            limb_angles.append(angle)
-        except (IndexError, ZeroDivisionError):
-            limb_angles.append(0)
-    return limb_angles
+IGNORE_LIST = [
+    8,
+    9,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+]  # Keypoints not used for comparison
 
 
-def extract_ref_motion_data(fname):
-    """Extract motion data from the BVH reference file."""
-    animation, joints_names, frametime = BVH.load(fname)
-    anim_xyz_fbx = positions_global(animation)
-    anim_xyz = np.zeros((anim_xyz_fbx.shape[0], 38, 3))
-    for body38_idx in range(38):
-        fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
-        anim_xyz[:, body38_idx] = anim_xyz_fbx[:, fbx_idx]
-    ref_timestamps = np.arange(0, anim_xyz.shape[0], frametime) * 1000
+async def process_and_send_data(websocket):
+    """Receive data via WebSocket, compute metrics, and send results back."""
 
-    anim_xyz2d = anim_xyz[:, :, [0, 1]]
+    # INITIALIZATTION
+    CLOCK = 0
+    CURRENT_LEVEL_IDX = 0
+    FRAME_COUNT = 0  # Keep track of received frames
 
-    ref_frames = [
-        {
-            "body_list": [
-                {"keypoint": np.array(frame3d), "keypoint_2d": np.array(frame2d)}
-            ]
-        }
-        for frame3d, frame2d in zip(anim_xyz, anim_xyz2d)
-    ]
+    # Load initial reference choreography
+    ref_motion_frames, frame_time = extract_ref_motion_data(
+        IDX_TO_MOTION_FILES[CURRENT_LEVEL_IDX]
+    )
 
-    return ref_timestamps, ref_frames
+    # Position, velocity, and acceleration tracking
+    left_hand_history = deque(maxlen=5)
+    right_hand_history = deque(maxlen=5)
+    prev_left_hand_velocity = np.zeros(2)
+    prev_right_hand_velocity = np.zeros(2)
+    last_left_hand_frame = np.zeros(3)
+    last_right_hand_frame = np.zeros(3)
 
-
-def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_height):
-    """Real-time rendering of reference and received animation frames."""
-    global received_frame  # Use the shared received_frame
-
-    key_wait = 10
-    current_ref_frame_idx = 0
-    current_ref_timestamp = 0
     start_time = time.time()
-    score_queue = deque(maxlen=MOVING_AVERAGE_LENGTH)
-    while True:
-        elapsed_time = (time.time() - start_time) * 1000
-        try:
-            if elapsed_time > current_ref_timestamp:
-                current_ref_frame_idx += 1
-                current_ref_timestamp = ref_timestamps[current_ref_frame_idx]
-        except IndexError:
-            current_ref_frame_idx = 0
-            current_ref_timestamp = ref_timestamps[0]
 
-        # Create an empty image
-        image = np.zeros((frame_height, frame_width, 4), dtype=np.uint8)
+    try:
+        async for message in websocket:
+            try:
+                message = json.loads(message)
+            except:
+                message = "{" + message[:-1] + "}"
+                message = json.loads(message)
 
-        # Get the received frame (synchronized)
-        received_bodies = None
-        with frame_lock:
-            if received_frame is not None:
-                received_frame = np.array(received_frame)
-                received_bodies = SimulatedBodies(
-                    {
-                        "body_list": [
-                            {
-                                "keypoint": received_frame,
-                                "keypoint_2d": received_frame[:, [0, 1]],
-                            }
-                        ]
-                    }
-                )
+            if "type" in message.keys():
+                if message["type"] == "ping":
+                    print("Received ping")
+                    continue
+                elif message["type"] == "level":
+                    pass  # TODO open new file
+                    level_idx = message["data"]
+                    if level_idx != CURRENT_LEVEL_IDX:
+                        CURRENT_LEVEL_IDX = level_idx
+                        ref_motion_frames, frame_time = extract_ref_motion_data(
+                            IDX_TO_MOTION_FILES[CURRENT_LEVEL_IDX]
+                        )
+                elif message["type"] == "start_level":
+                    start_time = time.time()  # Reset clock
+                    print("Level started")
+                else:
+                    print(f"Message type not recognized: {message['type']}")
+            FRAME_COUNT += 1
 
-        # Reference body keypoint
-        try:
-            ref_bodies = SimulatedBodies(ref_frames[current_ref_frame_idx])
-        except IndexError:
-            print("Looping animation...")
-            current_ref_frame_idx = 0
-            ref_bodies = SimulatedBodies(ref_frames[current_ref_frame_idx])
+            # Map incoming data to BODY38 format
+            mapped_frame = np.zeros((38, 3))
+            for body38_idx in range(38):
+                fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
+                mapped_frame[body38_idx] = message[f"bone{fbx_idx}"]
 
-        # Update viewer
-        cv_viewer.render_2D(
-            image,
-            image_scale,
-            received_bodies.body_list if received_bodies is not None else [],
-            ref_bodies.body_list,
-        )
+            # Filter out duplicate frames
+            if (mapped_frame[34] == last_left_hand_frame).all() and (
+                mapped_frame[35] == last_right_hand_frame
+            ).all():
+                continue
 
-        # Calculate score and display it
-        if (
-            len(ref_bodies.body_list) > 0
-            and received_bodies
-            and len(received_bodies.body_list) > 0
-        ):
-            frame_angles = calculate_limb_angles(
-                received_bodies.body_list[0].keypoint_2d
+            # Update last seen frames
+            last_left_hand_frame = mapped_frame[34]
+            last_right_hand_frame = mapped_frame[35]
+
+            # Extract positions of hands
+            current_time = time.time() - start_time
+            left_hand_position = mapped_frame[34, [1, 2]]  # LEFT_HAND_MIDDLE_4
+            right_hand_position = mapped_frame[35, [1, 2]]  # RIGHT_HAND_MIDDLE_4
+
+            # Track position history
+            left_hand_history.append((left_hand_position, current_time))
+            right_hand_history.append((right_hand_position, current_time))
+
+            # Compute velocity and acceleration
+            left_hand_velocity = np.zeros(2)
+            left_hand_acceleration = np.zeros(2)
+            right_hand_velocity = np.zeros(2)
+            right_hand_acceleration = np.zeros(2)
+
+            if len(left_hand_history) > 1:
+                pos1, t1 = left_hand_history[-2]
+                pos2, t2 = left_hand_history[-1]
+                dt = t2 - t1
+                if dt > 0:
+                    left_hand_velocity = (pos2 - pos1) / dt
+                    left_hand_acceleration = (
+                        left_hand_velocity - prev_left_hand_velocity
+                    ) / dt
+                    prev_left_hand_velocity = left_hand_velocity
+
+            if len(right_hand_history) > 1:
+                pos1, t1 = right_hand_history[-2]
+                pos2, t2 = right_hand_history[-1]
+                dt = t2 - t1
+                if dt > 0:
+                    right_hand_velocity = (pos2 - pos1) / dt
+                    right_hand_acceleration = (
+                        right_hand_velocity - prev_right_hand_velocity
+                    ) / dt
+                    prev_right_hand_velocity = right_hand_velocity
+
+            # Synchronize with the reference frame
+            reference_frame_index = int(current_time / frame_time) % len(
+                ref_motion_frames["keypoint_2d"]
             )
-            ref_angles = calculate_limb_angles(ref_bodies.body_list[0].keypoint_2d)
+            reference_frame = ref_motion_frames["keypoint_2d"][reference_frame_index]
 
+            # Compute similarity to reference frame
+            incoming_angles = calculate_limb_angles(mapped_frame)
+            ref_angles = calculate_limb_angles(reference_frame)
             # Filter out differences by ignoring indices in IGNORE_LIST
             filtered_diff = [
-                abs(ref_angles[j] - frame_angles[j]) / 180
+                abs(ref_angles[j] - incoming_angles[j]) / 180
                 for j in range(len(LIMB_CONNECTIONS))
                 if j not in IGNORE_LIST  # Skip indices in IGNORE_LIST
             ]
 
-            # Compute the current score only with the filtered differences
-            current_score = np.mean(filtered_diff)
-            color = (0, 255, 0)  # Color Green
-        else:
-            current_score = -1
-            color = (0, 0, 255, 255)  # Color Red
-        # Add the current score to the queue
-        score_queue.append(current_score)
+            # Prepare the data to send back to the client
+            result = {
+                "left_hand": {
+                    "position": left_hand_position.tolist(),
+                    "velocity": left_hand_velocity.tolist(),
+                    "acceleration": left_hand_acceleration.tolist(),
+                },
+                "right_hand": {
+                    "position": right_hand_position.tolist(),
+                    "velocity": right_hand_velocity.tolist(),
+                    "acceleration": right_hand_acceleration.tolist(),
+                },
+            }
+            await websocket.send(json.dumps(result))
+            if FRAME_COUNT % 10 == 0:
+                print("Sent data")
+            # print(f"Sent data: {result}")
 
-        # Compute the smoothed score as the average of the scores in the queue
-        smoothed_score = np.mean(score_queue)
+    except websockets.ConnectionClosed:
+        print("WebSocket connection closed.")
 
-        # Display score on the viewer
+
+def visualize_results(image_scale, frame_width, frame_height):
+    """Real-time rendering of received animation frames with FPS estimation."""
+    key_wait = 1
+    prev_time = time.time()  # Initialize the previous time
+    fps_queue = deque(maxlen=30)  # Moving average of the last 30 FPS values
+    smoothed_fps = 0
+
+    while True:
+        # Measure the time at the start of the frame
+        current_time = time.time()
+        elapsed_time = current_time - prev_time
+        prev_time = current_time
+
+        # Create an empty image
+        image = np.zeros((frame_height, frame_width, 4), dtype=np.uint8)
+
+        # Calculate FPS and smooth it using a moving average
+        if elapsed_time > 0:  # Avoid division by zero
+            fps = 1.0 / elapsed_time
+            fps_queue.append(fps)
+        smoothed_fps = np.mean(fps_queue)
+
+        # Update viewer with FPS
+        cv_viewer.render_2D(
+            image,
+            image_scale,
+            [],  # No bodies to display in this version
+            [],  # No reference bodies
+        )
         image = np.ascontiguousarray(np.flipud(image))
         cv2.putText(
             image,
-            f"Score: {smoothed_score:.2f}",
-            (50, 50),  # Position (x, y)
+            f"FPS: {smoothed_fps:.2f}",
+            (20, 30),  # Position (x, y)
             cv2.FONT_HERSHEY_SIMPLEX,  # Font type
             1,  # Font scale
-            color,  # Color (Green in RGBA)
-            1,  # Thicknessq
+            (255, 255, 255, 255),  # White color
+            1,  # Thickness
             cv2.LINE_AA,  # Line type
         )
 
@@ -173,63 +228,25 @@ def render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_hei
         if key == 113:  # 'q' key
             print("Exiting...")
             break
-        if key == 109:  # 'm' key
-            key_wait = 0 if key_wait > 0 else 10
-
     cv2.destroyAllWindows()
 
 
-async def keypoints_visualizer(websocket):
-    """Receive and visualize motion data from WebSocket."""
-    global received_frame  # Use the shared received_frame
-    try:
-        async for message in websocket:
-            print("Message received!")
-            try:
-                message = json.loads(message)
-            except:
-                # Decode the JSON message
-                message = "{" + message[:-1] + "}"
-                message = json.loads(message)
-            if "type" in message.keys() and message["type"] == "ping":
-                print("that was a ping!")
-            else:
-                print("Message decoded!")
-                mapped_frame = np.zeros((38, 3))
-                for body38_idx in range(38):
-                    fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[
-                        body38_idx
-                    ]  # if needs mapping
-                    # fbx_idx = body38_idx  # if already BODY38 format
-                    mapped_frame[body38_idx] = message[f"bone{fbx_idx}"]
-                with frame_lock:  # Synchronize access to received_frame
-                    received_frame = mapped_frame.copy()
-    except websockets.ConnectionClosed:
-        print("WebSocket connection closed.")
-
-
-def start_websocket_server():
-    """Start the WebSocket server in a separate thread."""
-    loop = asyncio.new_event_loop()  # Create a new event loop for this thread
-    asyncio.set_event_loop(loop)  # Set the event loop for the current thread
-    server = websockets.serve(keypoints_visualizer, "localhost", WEBSOCKET_PORT)
-    loop.run_until_complete(server)
-    print(f"WebSocket server running on ws://localhost:{WEBSOCKET_PORT}")
-    loop.run_forever()
-
-
 if __name__ == "__main__":
-    # Load reference motion data
-    ref_timestamps, ref_frames = extract_ref_motion_data(REFERENCE_FILE)
+    # Start WebSocket server
+    loop = asyncio.get_event_loop()
+    server = websockets.serve(process_and_send_data, "localhost", WEBSOCKET_PORT)
+    loop.run_until_complete(server)
 
-    # Frame properties
-    image_scale = [2 / 3, 2 / 3]
-    # image_scale = [1, 1]
-    frame_width, frame_height = [1280, 720]
-
-    # Start WebSocket server in a separate thread
-    websocket_thread = threading.Thread(target=start_websocket_server, daemon=True)
-    websocket_thread.start()
-
-    # Start rendering frames
-    render_frame(ref_timestamps, ref_frames, image_scale, frame_width, frame_height)
+    if CV_VIEWER:
+        # Frame properties
+        image_scale = [2 / 3, 2 / 3]
+        frame_width, frame_height = [1280, 720]
+        # Start visualization thread in a separate thread
+        rendering_thread = threading.Thread(
+            target=visualize_results,
+            args=(image_scale, frame_width, frame_height),
+            daemon=True,
+        )
+        rendering_thread.start()
+    print(f"Server is running on ws://localhost:{WEBSOCKET_PORT}")
+    loop.run_forever()

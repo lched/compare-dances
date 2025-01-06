@@ -1,5 +1,9 @@
 from enum import Enum
 
+import numpy as np
+from Motion import BVH
+from Motion.Animation import positions_global
+
 
 class SimulatedBodyData:
     def __init__(self, body_info):
@@ -264,3 +268,40 @@ BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS = {
     36: 27,
     37: 51,
 }
+
+
+IDX_TO_MOTION_FILES = {0: "dance_comparison/BP_Mixamo_New10_Scene_1_18_0_fixed.bvh"}
+
+
+def extract_ref_motion_data(
+    fname,
+):
+    """Extract motion data from the BVH reference file."""
+    animation, joints_names, frametime = BVH.load(fname)
+    anim_xyz_fbx = positions_global(animation)
+    anim_xyz = np.zeros((anim_xyz_fbx.shape[0], 38, 3))
+    for body38_idx in range(38):
+        fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
+        anim_xyz[:, body38_idx] = anim_xyz_fbx[:, fbx_idx]
+    anim_xyz2d = anim_xyz[:, :, [0, 1]]
+
+    ref_frames = {"keypoint": np.array(anim_xyz), "keypoint_2d": np.array(anim_xyz2d)}
+    return ref_frames, frametime
+
+
+def calculate_limb_angles(frame_landmarks):
+    """Calculate limb angles for each frame."""
+    limb_angles = []
+    for start, end in LIMB_CONNECTIONS:
+        try:
+            start_point = np.array(frame_landmarks[start.value])
+            end_point = np.array(frame_landmarks[end.value])
+
+            dx = end_point[0] - start_point[0]
+            dy = end_point[1] - start_point[1]
+            angle = np.degrees(np.arctan2(dx, dy))
+            angle = abs(angle) if angle <= 180 else 360 - abs(angle)
+            limb_angles.append(angle)
+        except (IndexError, ZeroDivisionError):
+            limb_angles.append(0)
+    return limb_angles
