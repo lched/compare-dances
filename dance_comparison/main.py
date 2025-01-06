@@ -43,6 +43,7 @@ REF_MOTION = None
 REF_FRAMETIME = None
 REF_ENERGY = None
 REF_ANGLES = None
+REF_FRAME_IDX = None
 
 # History to compute energy
 # Position, velocity, and acceleration tracking
@@ -81,6 +82,14 @@ client = SimpleUDPClient(OSC_IP, OSC_CLIENT_PORT)  # Create an OSC client
 def answer_ping(address, *args):
     print("Received ping!")
     client.send_message("/answer", json.dumps("pong"))
+
+
+def set_ref_frame_idx(address, *args):
+    global REF_FRAME_IDX
+    if REF_FRAMETIME and REF_MOTION:
+        reference_frame_index = int(args[0] / REF_FRAMETIME) % len(REF_MOTION)
+    if reference_frame_index != REF_FRAME_IDX:
+        REF_FRAME_IDX = reference_frame_index
 
 
 def load_level(address, *args):
@@ -164,8 +173,7 @@ def process_and_send_data(address, *args):
                 prev_right_hand_velocity = right_hand_velocity
 
         # Synchronize with the reference frame
-        reference_frame_index = int(current_time / REF_FRAMETIME) % len(REF_MOTION)
-        reference_frame = REF_MOTION[reference_frame_index]
+        reference_frame = REF_MOTION[REF_FRAMETIME]
 
         # # Compute similarity to reference frame
         spectator_energy = (
@@ -178,9 +186,9 @@ def process_and_send_data(address, *args):
 
         # Prepare the data to send back to the client
         result = {
-            "reference_energy": REF_ENERGY[reference_frame_index],
+            "reference_energy": REF_ENERGY[REF_FRAMETIME],
             "spectator_energy": spectator_energy,
-            "reference_angles": REF_ANGLES[reference_frame_index],
+            "reference_angles": REF_ANGLES[REF_FRAMETIME],
             "spectator_angles": spectator_angles,
             "is_close_energy": -1,
             "is_close_angles": are_angles_close(
@@ -203,6 +211,9 @@ async def main():
     dispatcher.map("/data*", process_and_send_data)
     dispatcher.map("/level", load_level)
     dispatcher.map("/ping", answer_ping)
+    dispatcher.map(
+        "/timestamp",
+    )
 
     server = AsyncIOOSCUDPServer(
         (OSC_IP, OSC_PORT), dispatcher, asyncio.get_event_loop()
