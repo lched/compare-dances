@@ -19,13 +19,21 @@ from pythonosc.udp_client import SimpleUDPClient
 from pythonosc.osc_server import AsyncIOOSCUDPServer
 
 # import cv_viewer.tracking_viewer as cv_viewer
-from score import compute_energy_of_ref_file, compute_angles_of_ref_file
+from score import (
+    compute_energy_of_ref_file,
+    compute_angles_of_ref_file,
+    are_angles_close,
+)
 from utils import (
     BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS,
     extract_ref_motion_data,
     IDX_TO_MOTION_FILES,
     BODY38_name2idx,
 )
+
+
+# DIFFICULTY SETTINGS
+ANGLES_TOLERANCE = 20  # in degrees
 
 
 # DATA ABOUT CURRENT LEVEL
@@ -99,7 +107,8 @@ def process_and_send_data(address, *args):
 
     start_time = time.time()
     try:
-        data = json.loads(args[0])
+        timestamp = args[0]
+        data = np.array(args[1:])
         # Map incoming data to BODY38 format
         incoming_frame = np.zeros((38, 3))
         for body38_idx in range(38):
@@ -170,6 +179,9 @@ def process_and_send_data(address, *args):
         incoming_angles = compute_angles_of_ref_file(
             incoming_frame, ANGLES_USED_FOR_SCORE
         )
+        are_they_close_tho = are_angles_close(
+            incoming_angles, REF_ANGLES, ANGLES_TOLERANCE
+        )
 
         # Prepare the data to send back to the client
         result = {
@@ -178,7 +190,7 @@ def process_and_send_data(address, *args):
             "reference_angles": REF_ANGLES[reference_frame_index],
             "spectator_angles": incoming_angles,
             "is_close_energy": 0,
-            "is_close_angles": 0,
+            "is_close_angles": are_they_close_tho.tolist(),
         }
         client.send_message("/result", json.dumps(result))
         print("Sent data")
