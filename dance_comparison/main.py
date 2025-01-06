@@ -18,48 +18,42 @@ from pythonosc.udp_client import SimpleUDPClient
 from pythonosc.osc_server import AsyncIOOSCUDPServer
 
 # import cv_viewer.tracking_viewer as cv_viewer
-from score import compute_energy
+from score import compute_energy_of_ref_file, compute_angles_of_ref_file
 from utils import (
     BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS,
     extract_ref_motion_data,
     IDX_TO_MOTION_FILES,
-    LIMB_CONNECTIONS,
-    calculate_limb_angles,
     BODY38_name2idx,
 )
 
-USE_3D = False  # TODO
+
+# DATA ABOUT CURRENT LEVEL
 CURRENT_LEVEL_IDX = 0
+ENERGY_ARRAY = None
+REF_MOTION = None
+REF_FRAMETIME = None
+REF_ENERGY = None
+
+# OSC
 CV_VIEWER = False
 OSC_PORT = 8005
 OSC_CLIENT_PORT = 9000  # Port to send responses
 OSC_IP = "127.0.0.1"
 
+# MISC
+USE_3D = False  # TODO
+
+# SCORE COMPUTATION
 JOINTS_USED_FOR_ENERGY = ["LEFT_HAND_MIDDLE_4", "RIGHT_HAND_MIDDLE_4"]
 ANGLES_USED_FOR_SCORE = (
     [  # should be tuples of 3 keypoints, the one in the middle being the one with the
-        ()
+        (2, 10, 12),  # Left shoulder
+        (2, 11, 13),  # Right shoulder
+        (10, 12, 14),  # Left Elbow
+        (11, 13, 15),  # Right elbow
     ]
 )
 
-# IGNORE_LIST = [
-#     8,
-#     9,
-#     24,
-#     25,
-#     26,
-#     27,
-#     28,
-#     29,
-#     30,
-#     31,
-#     32,
-#     33,
-#     34,
-#     35,
-#     36,
-#     37,
-# ]  # Keypoints not used for comparison
 
 client = SimpleUDPClient(OSC_IP, OSC_CLIENT_PORT)  # Create an OSC client
 
@@ -70,17 +64,18 @@ def answer_ping(address, *args):
 
 
 def load_level(address, *args):
+    global REF_MOTION, REF_FRAMETIME, REF_ENERGY
     """args[0] is an int that indicates the level"""
-    ref_motion, ref_frametime = extract_ref_motion_data(IDX_TO_MOTION_FILES[args[0]])
+    REF_MOTION, REF_FRAMETIME = extract_ref_motion_data(IDX_TO_MOTION_FILES[args[0]])
 
     # Compute energy of the keyframes selected in JOINTS_USED_FOR_ENERGY
     used_indices = [
         BODY38_name2idx[keypoint_name] for keypoint_name in JOINTS_USED_FOR_ENERGY
     ]
-    ref_energy = compute_energy(ref_motion[:, used_indices])
+    REF_ENERGY = compute_energy_of_ref_file(REF_MOTION[:, used_indices])
+    REF_ANGLES = compute_angles_of_ref_file(REF_MOTION, ANGLES_USED_FOR_SCORE)
 
     print(f"Loaded level: {IDX_TO_MOTION_FILES[args[0]]}")
-    return ref_motion, ref_frametime, ref_energy
 
 
 def process_and_send_data(address, *args):
@@ -184,7 +179,7 @@ async def loop():
 
 async def main():
     dispatcher = Dispatcher()
-    dispatcher.map("/data", process_and_send_data)
+    dispatcher.map("/data/...", process_and_send_data)
     dispatcher.map("/level", load_level)
     dispatcher.map("/ping", answer_ping)
 

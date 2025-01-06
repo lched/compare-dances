@@ -31,14 +31,14 @@ def angle_between_points(A, B, C):
     return angle_degrees
 
 
-def compute_energy(frames):
+def compute_energy_of_ref_file(motion_frames):
     """Given a temporal array of frames, compute the "energy", which is
     the absolute value of the acceleration for each frame"""
-    energy = np.zeros(frames.shape[0])
-    for i in range(1, len(frames) - 1):
-        prev_frame = frames[i - 1]
-        curr_frame = frames[i]
-        next_frame = frames[i + 1]
+    energy = np.zeros(motion_frames.shape[0])
+    for i in range(1, len(motion_frames) - 1):
+        prev_frame = motion_frames[i - 1]
+        curr_frame = motion_frames[i]
+        next_frame = motion_frames[i + 1]
 
         # Compute the acceleration as the difference in velocity
         velocity1 = curr_frame - prev_frame
@@ -48,3 +48,11 @@ def compute_energy(frames):
         # Sum the absolute value of the acceleration
         energy[i] = np.mean(np.abs(acceleration))
     return energy
+
+
+def compute_angles_of_ref_file(motion_frames, angle_indices):
+    """
+    motion_frames shape ()
+    angle_indices list of Tuples of 3 indices that make the angles we want to monitor
+    """
+    return 0
