@@ -11,6 +11,7 @@ except ModuleNotFoundError:
 from collections import deque
 
 # import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import time
 from pythonosc.dispatcher import Dispatcher
@@ -28,11 +29,21 @@ from utils import (
 
 
 # DATA ABOUT CURRENT LEVEL
-CURRENT_LEVEL_IDX = 0
+CURRENT_LEVEL_IDX = None
 ENERGY_ARRAY = None
 REF_MOTION = None
 REF_FRAMETIME = None
 REF_ENERGY = None
+
+# History to compute energy
+# Position, velocity, and acceleration tracking
+left_hand_history = deque(maxlen=5)
+right_hand_history = deque(maxlen=5)
+prev_left_hand_velocity = np.zeros(2)
+prev_right_hand_velocity = np.zeros(2)
+last_left_hand_frame = np.zeros(3)
+last_right_hand_frame = np.zeros(3)
+
 
 # OSC
 CV_VIEWER = False
@@ -64,8 +75,12 @@ def answer_ping(address, *args):
 
 
 def load_level(address, *args):
-    global REF_MOTION, REF_FRAMETIME, REF_ENERGY
     """args[0] is an int that indicates the level"""
+    global REF_MOTION, REF_FRAMETIME, REF_ENERGY
+
+    # if CURRENT_LEVEL_IDX == args[0]:
+    #     print("Level already loaded")
+    #     return
     REF_MOTION, REF_FRAMETIME = extract_ref_motion_data(IDX_TO_MOTION_FILES[args[0]])
 
     # Compute energy of the keyframes selected in JOINTS_USED_FOR_ENERGY
@@ -80,13 +95,6 @@ def load_level(address, *args):
 
 def process_and_send_data(address, *args):
     """Receive data via OSC, compute metrics, and send results back."""
-    # Position, velocity, and acceleration tracking
-    left_hand_history = deque(maxlen=5)
-    right_hand_history = deque(maxlen=5)
-    prev_left_hand_velocity = np.zeros(2)
-    prev_right_hand_velocity = np.zeros(2)
-    last_left_hand_frame = np.zeros(3)
-    last_right_hand_frame = np.zeros(3)
 
     start_time = time.time()
     try:
@@ -179,7 +187,7 @@ async def loop():
 
 async def main():
     dispatcher = Dispatcher()
-    dispatcher.map("/data/...", process_and_send_data)
+    dispatcher.map("/data*", process_and_send_data)
     dispatcher.map("/level", load_level)
     dispatcher.map("/ping", answer_ping)
 

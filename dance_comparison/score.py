@@ -55,4 +55,11 @@ def compute_angles_of_ref_file(motion_frames, angle_indices):
     motion_frames shape ()
     angle_indices list of Tuples of 3 indices that make the angles we want to monitor
     """
-    return 0
+    angles = np.zeros((motion_frames.shape[0], len(angle_indices)))
+    for i in range(len(motion_frames)):
+        for j, (A_idx, B_idx, C_idx) in enumerate(angle_indices):
+            A = motion_frames[i][A_idx]
+            B = motion_frames[i][B_idx]
+            C = motion_frames[i][C_idx]
+            angles[i][j] = angle_between_points(A, B, C)
+    return angles
