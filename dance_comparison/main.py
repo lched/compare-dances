@@ -21,8 +21,7 @@ from pythonosc.osc_server import AsyncIOOSCUDPServer
 # import cv_viewer.tracking_viewer as cv_viewer
 from score import (
     compute_energy_of_ref_file,
-    compute_angles_of_ref_file,
-    compute_angles_frame,
+    compute_angles,
     are_angles_close,
 )
 from utils import (
@@ -38,29 +37,9 @@ ANGLES_TOLERANCE = 20  # in degrees
 SEND_RESULTS_EVERY = 0
 
 
-# DATA ABOUT CURRENT LEVEL
-CURRENT_LEVEL_IDX = None
-ENERGY_ARRAY = None
-REF_MOTION = None
-REF_FRAMETIME = None
-REF_ENERGY = None
-REF_ANGLES = None
-REF_FRAME_IDX = None
-
-# History to compute energy
-# Position, velocity, and acceleration tracking
-left_hand_history = deque(maxlen=5)
-right_hand_history = deque(maxlen=5)
-prev_left_hand_velocity = np.zeros(2)
-prev_right_hand_velocity = np.zeros(2)
-last_left_hand_frame = np.zeros(3)
-last_right_hand_frame = np.zeros(3)
-
-
 # OSC
-CV_VIEWER = False
-OSC_PORT = 8080
-OSC_CLIENT_PORT = 9000  # Port to send responses
+OSC_PORT = 8080  # PYTHON SERVER PORT
+OSC_CLIENT_PORT = 9000  # UNREAL PORT
 OSC_IP = "127.0.0.1"
 
 # MISC
@@ -76,6 +55,25 @@ ANGLES_USED_FOR_SCORE = (
         (13, 15, 17),  # Right elbow
     ]
 )
+
+
+# DATA ABOUT CURRENT LEVEL
+CURRENT_LEVEL_IDX = None
+ENERGY_ARRAY = None
+REF_MOTION = None
+REF_FRAMETIME = None
+REF_FRAME_IDX = None
+REF_ENERGY = None
+REF_ANGLES = None
+
+# History to compute energy
+# Position, velocity, and acceleration tracking
+left_hand_history = deque(maxlen=5)
+right_hand_history = deque(maxlen=5)
+prev_left_hand_velocity = np.zeros(2)
+prev_right_hand_velocity = np.zeros(2)
+last_left_hand_frame = np.zeros(3)
+last_right_hand_frame = np.zeros(3)
 
 # Client to senc OSC messages back to Unreal
 client = SimpleUDPClient(OSC_IP, OSC_CLIENT_PORT)  # Create an OSC client
@@ -101,7 +99,7 @@ def load_level(address, *args):
         BODY38_name2idx[keypoint_name] for keypoint_name in JOINTS_USED_FOR_ENERGY
     ]
     REF_ENERGY = compute_energy_of_ref_file(REF_MOTION[:, used_indices])
-    REF_ANGLES = compute_angles_of_ref_file(REF_MOTION, ANGLES_USED_FOR_SCORE)
+    REF_ANGLES = compute_angles(REF_MOTION, ANGLES_USED_FOR_SCORE)
 
     print(f"Loaded level: {IDX_TO_MOTION_FILES[args[0]]}")
 
@@ -115,7 +113,7 @@ def process_and_send_data(address, *args):
         return
     try:
         timestamp = args[-1]  # in ms
-        print(timestamp)
+        # print(timestamp)
         if REF_FRAMETIME is not None and REF_MOTION is not None:
             reference_frame_index = int(timestamp / REF_FRAMETIME) % len(REF_MOTION)
         if reference_frame_index != REF_FRAME_IDX:
@@ -183,21 +181,23 @@ def process_and_send_data(address, *args):
             np.mean((np.abs(right_hand_acceleration), np.abs(left_hand_acceleration)))
             ** 2
         )
-        spectator_angles = compute_angles_frame(spectator_frame, ANGLES_USED_FOR_SCORE)
+        spectator_angles = compute_angles(
+            spectator_frame[np.newaxis, :], ANGLES_USED_FOR_SCORE
+        )
 
         # Prepare the data to send back to the client
         result = {
-            "reference_energy": REF_ENERGY[REF_FRAMETIME],
+            "reference_energy": REF_ENERGY[REF_FRAME_IDX],
             "spectator_energy": spectator_energy,
-            "reference_angles": REF_ANGLES[REF_FRAMETIME],
-            "spectator_angles": spectator_angles,
+            "reference_angles": REF_ANGLES[REF_FRAME_IDX].tolist(),
+            "spectator_angles": spectator_angles.tolist(),
             "is_close_energy": -1,
             "is_close_angles": are_angles_close(
                 spectator_angles, REF_ANGLES, ANGLES_TOLERANCE
             ).tolist(),
         }
         client.send_message("/result", json.dumps(result))
-        print("Sent data")
+        # print("Sent data")
     except Exception as e:
         print(f"Error processing data: {e}")
 
