@@ -58,10 +58,10 @@ USE_3D = False  # TODO
 JOINTS_USED_FOR_ENERGY = ["LEFT_HAND_MIDDLE_4", "RIGHT_HAND_MIDDLE_4"]
 ANGLES_USED_FOR_SCORE = (
     [  # should be tuples of 3 keypoints, the one in the middle being the one with the
-        (2, 10, 12),  # Left shoulder
-        (2, 11, 13),  # Right shoulder
-        (10, 12, 14),  # Left Elbow
-        (11, 13, 15),  # Right elbow
+        (10, 12, 14),  # Left shoulder
+        (11, 13, 15),  # Right shoulder
+        (12, 14, 16),  # Left elbow
+        (13, 15, 17),  # Right elbow
     ]
 )
 
@@ -152,11 +152,9 @@ def process_and_send_data(address, *args):
                 ) / dt
                 prev_right_hand_velocity = right_hand_velocity
 
-        # # Synchronize with the reference frame
-        # reference_frame_index = int(current_time / frame_time) % len(
-        #     ref_motion_frames["keypoint_2d"]
-        # )
-        # reference_frame = ref_motion_frames["keypoint_2d"][reference_frame_index]
+        # Synchronize with the reference frame
+        reference_frame_index = int(current_time / REF_FRAMETIME) % len(REF_MOTION)
+        reference_frame = REF_MOTION[reference_frame_index]
 
         # # Compute similarity to reference frame
         # incoming_angles = calculate_limb_angles(mapped_frame)
@@ -170,9 +168,8 @@ def process_and_send_data(address, *args):
 
         # Prepare the data to send back to the client
         result = {
-            "right_hand": {
-                "acceleration": right_hand_acceleration.tolist(),
-            },
+            "is_close_energy": 0,
+            "is_close_angles": 0,
         }
         client.send_message("/result", json.dumps(result))
         print("Sent data")
