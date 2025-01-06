@@ -46,5 +46,5 @@ def compute_energy(frames):
         acceleration = velocity2 - velocity1
 
         # Sum the absolute value of the acceleration
-        energy[i] = abs(acceleration)
+        energy[i] = np.mean(np.abs(acceleration))
     return energy

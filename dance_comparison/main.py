@@ -31,7 +31,7 @@ from utils import (
 USE_3D = False  # TODO
 CURRENT_LEVEL_IDX = 0
 CV_VIEWER = False
-OSC_PORT = 8000
+OSC_PORT = 8005
 OSC_CLIENT_PORT = 9000  # Port to send responses
 OSC_IP = "127.0.0.1"
 
@@ -65,6 +65,7 @@ client = SimpleUDPClient(OSC_IP, OSC_CLIENT_PORT)  # Create an OSC client
 
 
 def answer_ping(address, *args):
+    print("Received ping!")
     client.send_message("/answer", json.dumps("pong"))
 
 
@@ -76,7 +77,7 @@ def load_level(address, *args):
     used_indices = [
         BODY38_name2idx[keypoint_name] for keypoint_name in JOINTS_USED_FOR_ENERGY
     ]
-    ref_energy = compute_energy(ref_motion["keypoint_2d"][:, used_indices])
+    ref_energy = compute_energy(ref_motion[:, used_indices])
 
     print(f"Loaded level: {IDX_TO_MOTION_FILES[args[0]]}")
     return ref_motion, ref_frametime, ref_energy
