@@ -57,7 +57,7 @@ last_right_hand_frame = np.zeros(3)
 
 # OSC
 CV_VIEWER = False
-OSC_PORT = 8005
+OSC_PORT = 8080
 OSC_CLIENT_PORT = 9000  # Port to send responses
 OSC_IP = "127.0.0.1"
 
@@ -86,6 +86,7 @@ def answer_ping(address, *args):
 
 def set_ref_frame_idx(address, *args):
     global REF_FRAME_IDX
+    print(args[0])
     if REF_FRAMETIME and REF_MOTION:
         reference_frame_index = int(args[0] / REF_FRAMETIME) % len(REF_MOTION)
     if reference_frame_index != REF_FRAME_IDX:
@@ -113,7 +114,7 @@ def load_level(address, *args):
 
 def process_and_send_data(address, *args):
     """Receive data via OSC, compute metrics, and send results back."""
-
+    return 0
     start_time = time.time()
     try:
         timestamp = args[0]  # in seconds
@@ -212,7 +213,7 @@ async def main():
     dispatcher.map("/level", load_level)
     dispatcher.map("/ping", answer_ping)
     dispatcher.map(
-        "/timestamp",
+        "/timestamp", set_ref_frame_idx
     )
 
     server = AsyncIOOSCUDPServer(
