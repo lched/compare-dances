@@ -34,6 +34,7 @@ ENERGY_ARRAY = None
 REF_MOTION = None
 REF_FRAMETIME = None
 REF_ENERGY = None
+REF_ANGLES = None
 
 # History to compute energy
 # Position, velocity, and acceleration tracking
@@ -76,7 +77,7 @@ def answer_ping(address, *args):
 
 def load_level(address, *args):
     """args[0] is an int that indicates the level"""
-    global REF_MOTION, REF_FRAMETIME, REF_ENERGY
+    global REF_MOTION, REF_FRAMETIME, REF_ENERGY, REF_ANGLES
 
     # if CURRENT_LEVEL_IDX == args[0]:
     #     print("Level already loaded")
@@ -98,27 +99,27 @@ def process_and_send_data(address, *args):
 
     start_time = time.time()
     try:
-        message = json.loads(args[0])
+        data = json.loads(args[0])
         # Map incoming data to BODY38 format
-        mapped_frame = np.zeros((38, 3))
+        incoming_frame = np.zeros((38, 3))
         for body38_idx in range(38):
             fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
-            mapped_frame[body38_idx] = message[f"bone{fbx_idx}"]
+            incoming_frame[body38_idx] = data[f"bone{fbx_idx}"]
 
         # Filter out duplicate frames
-        if (mapped_frame[34] == last_left_hand_frame).all() and (
-            mapped_frame[35] == last_right_hand_frame
+        if (incoming_frame[34] == last_left_hand_frame).all() and (
+            incoming_frame[35] == last_right_hand_frame
         ).all():
             return
 
         # Update last seen frames
-        last_left_hand_frame = mapped_frame[34]
-        last_right_hand_frame = mapped_frame[35]
+        last_left_hand_frame = incoming_frame[34]
+        last_right_hand_frame = incoming_frame[35]
 
         # Extract positions of hands
         current_time = time.time() - start_time
-        left_hand_position = mapped_frame[34, [1, 2]]  # LEFT_HAND_MIDDLE_4
-        right_hand_position = mapped_frame[35, [1, 2]]  # RIGHT_HAND_MIDDLE_4
+        left_hand_position = incoming_frame[34, [1, 2]]  # LEFT_HAND_MIDDLE_4
+        right_hand_position = incoming_frame[35, [1, 2]]  # RIGHT_HAND_MIDDLE_4
 
         # Track position history
         left_hand_history.append((left_hand_position, current_time))
@@ -165,9 +166,17 @@ def process_and_send_data(address, *args):
         #     for j in range(len(LIMB_CONNECTIONS))
         #     if j not in IGNORE_LIST  # Skip indices in IGNORE_LIST
         # ]
+        incoming_energy = np.abs() ** 2
+        incoming_angles = compute_angles_of_ref_file(
+            incoming_frame, ANGLES_USED_FOR_SCORE
+        )
 
         # Prepare the data to send back to the client
         result = {
+            "reference_energy": REF_ENERGY[reference_frame_index],
+            "spectator_energy": 0,
+            "reference_angles": REF_ANGLES[reference_frame_index],
+            "spectator_angles": incoming_angles,
             "is_close_energy": 0,
             "is_close_angles": 0,
         }

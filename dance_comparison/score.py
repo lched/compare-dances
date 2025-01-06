@@ -20,6 +20,32 @@ def angle_between_points(A, B, C):
     return angle_degrees
 
 
+def are_angles_close(incoming_angles, ref_angles, tolerance=20):
+    """
+    Check if angles in two arrays are close within a given tolerance.
+
+    Parameters:
+        incoming_angles (array-like): Array of incoming angles in degrees.
+        ref_angles (array-like): Array of reference angles in degrees.
+        tolerance (float): Maximum allowed difference between angles.
+
+    Returns:
+        np.ndarray: Boolean array indicating if angles are close.
+    """
+    # Convert to numpy arrays for element-wise operations
+    incoming_angles = np.array(incoming_angles)
+    ref_angles = np.array(ref_angles)
+
+    # Calculate the absolute difference between angles
+    angle_diff = np.abs(incoming_angles - ref_angles)
+
+    # Adjust for angles that cross the 360° boundary
+    angle_diff = np.minimum(angle_diff, 360 - angle_diff)
+
+    # Check if differences are within the tolerance
+    return angle_diff <= tolerance
+
+
 def compute_energy_of_ref_file(motion_frames):
     """Given a temporal array of frames, compute the "energy", which is
     the absolute value of the acceleration for each frame"""
