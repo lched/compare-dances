@@ -11,7 +11,6 @@ except ModuleNotFoundError:
 from collections import deque
 
 # import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import time
 from pythonosc.dispatcher import Dispatcher
@@ -39,8 +38,9 @@ SEND_RESULTS_EVERY = 0
 
 # OSC
 OSC_PORT = 8080  # PYTHON SERVER PORT
-OSC_CLIENT_PORT = 9000  # UNREAL PORT
+OSC_CLIENT_PORT = 9001  # UNREAL PORT
 OSC_IP = "127.0.0.1"
+RESULT_INTERVAL = 1  # Interval at which to send results of the analysis (in seconds)
 
 # MISC
 USE_3D = False  # TODO
@@ -74,6 +74,8 @@ prev_left_hand_velocity = np.zeros(2)
 prev_right_hand_velocity = np.zeros(2)
 last_left_hand_frame = np.zeros(3)
 last_right_hand_frame = np.zeros(3)
+smoothed_results = None
+last_send_time = None
 
 # Client to senc OSC messages back to Unreal
 client = SimpleUDPClient(OSC_IP, OSC_CLIENT_PORT)  # Create an OSC client
@@ -86,7 +88,7 @@ def answer_ping(address, *args):
 
 def load_level(address, *args):
     """args[0] is an int that indicates the level"""
-    global REF_MOTION, REF_FRAMETIME, REF_ENERGY, REF_ANGLES, CURRENT_LEVEL_IDX
+    global REF_MOTION, REF_FRAMETIME, REF_ENERGY, REF_ANGLES, CURRENT_LEVEL_IDX, smoothed_results, last_send_time
 
     if CURRENT_LEVEL_IDX and CURRENT_LEVEL_IDX == args[0]:
         print(f"Level already loaded {IDX_TO_MOTION_FILES[args[0]]}")
@@ -94,19 +96,23 @@ def load_level(address, *args):
     CURRENT_LEVEL_IDX = args[0]
     REF_MOTION, REF_FRAMETIME = extract_ref_motion_data(IDX_TO_MOTION_FILES[args[0]])
 
+    # Initialize buffer to store results depending on the framerate
+    smoothed_results = deque(maxlen=int(1 / REF_FRAMETIME * RESULT_INTERVAL))
+
     # Compute energy of the keyframes selected in JOINTS_USED_FOR_ENERGY
     used_indices = [
         BODY38_name2idx[keypoint_name] for keypoint_name in JOINTS_USED_FOR_ENERGY
     ]
     REF_ENERGY = compute_energy_of_ref_file(REF_MOTION[:, used_indices])
     REF_ANGLES = compute_angles(REF_MOTION, ANGLES_USED_FOR_SCORE)
+    last_send_time = time.time()
 
     print(f"Loaded level: {IDX_TO_MOTION_FILES[args[0]]}")
 
 
 def process_and_send_data(address, *args):
     """Receive data via OSC, compute metrics, and send results back."""
-    global REF_FRAME_IDX, left_hand_history, right_hand_history, prev_left_hand_velocity, prev_right_hand_velocity, last_left_hand_frame, last_right_hand_frame
+    global REF_FRAME_IDX, left_hand_history, right_hand_history, prev_left_hand_velocity, prev_right_hand_velocity, last_left_hand_frame, last_right_hand_frame, last_send_time
     start_time = time.time()
     if REF_MOTION is None:
         print("No level loaded! Skipping analysis")
@@ -125,12 +131,6 @@ def process_and_send_data(address, *args):
         for body38_idx in range(38):
             fbx_idx = BODY38_FORMAT_TO_CORRESPONDING_FBX_KEYPOINTS[body38_idx]
             spectator_frame[body38_idx] = data[fbx_idx]
-
-        # Filter out duplicate frames
-        if np.array_equal(spectator_frame[34], last_left_hand_frame) and np.array_equal(
-            spectator_frame[35], last_right_hand_frame
-        ):
-            return
 
         # Update last seen frames
         last_left_hand_frame = spectator_frame[34]
@@ -185,19 +185,42 @@ def process_and_send_data(address, *args):
             spectator_frame[np.newaxis, :], ANGLES_USED_FOR_SCORE
         )
 
-        # Prepare the data to send back to the client
-        result = {
-            "reference_energy": REF_ENERGY[REF_FRAME_IDX],
-            "spectator_energy": spectator_energy,
-            "reference_angles": REF_ANGLES[REF_FRAME_IDX].tolist(),
-            "spectator_angles": spectator_angles.tolist(),
-            "is_close_energy": -1,
-            "is_close_angles": are_angles_close(
-                spectator_angles, REF_ANGLES, ANGLES_TOLERANCE
-            ).tolist(),
-        }
-        client.send_message("/result", json.dumps(result))
-        # print("Sent data")
+        smoothed_results.append(
+            {
+                "spectator_energy": spectator_energy,
+                "spectator_angles": spectator_angles,
+                "is_close_angles": are_angles_close(
+                    spectator_angles, REF_ANGLES, ANGLES_TOLERANCE
+                ).tolist(),
+            }
+        )
+
+        current_time = time.time()
+        if current_time - last_send_time >= RESULT_INTERVAL:
+            # Compute smoothed values
+            averaged_energy = np.mean(
+                [result["spectator_energy"] for result in smoothed_results]
+            )
+            averaged_angles = np.mean(
+                [result["spectator_angles"] for result in smoothed_results], axis=0
+            )
+            averaged_is_close_angles = np.mean(
+                [result["is_close_angles"] for result in smoothed_results], axis=0
+            )
+
+            # Prepare the smoothed result
+            smoothed_result = {
+                # "reference_energy": REF_ENERGY[REF_FRAME_IDX],
+                "averaged_energy": averaged_energy,
+                # "reference_angles": REF_ANGLES[REF_FRAME_IDX].tolist(),
+                # "averaged_angles": averaged_angles.tolist(),
+                # "is_close_energy": -1,  # Placeholder if needed
+                # "averaged_is_close_angles": (averaged_is_close_angles > 0.5).tolist(),  # Threshold for boolean
+            }
+
+            client.send_message("/result", json.dumps(smoothed_result))
+            last_send_time = current_time
+            print("Sent data")
     except Exception as e:
         print(f"Error processing data: {e}")
 
