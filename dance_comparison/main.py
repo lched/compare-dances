@@ -210,10 +210,10 @@ def process_and_send_data(address, *args):
 
             # Prepare the smoothed result
             smoothed_result = {
-                # "reference_energy": REF_ENERGY[REF_FRAME_IDX],
+                "reference_energy": REF_ENERGY[REF_FRAME_IDX],
                 "averaged_energy": averaged_energy,
-                # "reference_angles": REF_ANGLES[REF_FRAME_IDX].tolist(),
-                # "averaged_angles": averaged_angles.tolist(),
+                "reference_angles": REF_ANGLES[REF_FRAME_IDX].tolist(),
+                "averaged_angles": averaged_angles.tolist(),
                 # "is_close_energy": -1,  # Placeholder if needed
                 # "averaged_is_close_angles": (averaged_is_close_angles > 0.5).tolist(),  # Threshold for boolean
             }
