@@ -2,6 +2,8 @@
 import math
 import numpy as np
 
+from skeleton_utils import JOINTS_NAMES_TO_IDX
+
 
 def angle_between_points(A, B, C):
     # Vectors BA and BC
@@ -78,3 +80,35 @@ def compute_angles(motion_frames, angle_indices):
             C = motion_frames[i][C_idx]
             angles[i][j] = angle_between_points(A, B, C)
     return angles
+
+
+def majority_voting(array):
+    # Count the number of True values
+    num_true = np.sum(array)
+
+    # Check if it's greater than or equal to half plus one
+    return num_true >= (len(array) // 2 + 1)
+
+
+def compute_hands_energy(skeleton, prev_frame, prev_velocity):
+    """Compute energy for the left and right hands."""
+    left_hand = skeleton[JOINTS_NAMES_TO_IDX["LeftHand"]]
+    right_hand = skeleton[JOINTS_NAMES_TO_IDX["RightHand"]]
+
+    # Compute velocity (change in position)
+    left_hand_velocity = left_hand - prev_frame[JOINTS_NAMES_TO_IDX["LeftHand"]]
+    right_hand_velocity = right_hand - prev_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
+
+    # Compute acceleration (change in velocity)
+    left_hand_acceleration = left_hand_velocity - prev_velocity["left"]
+    right_hand_acceleration = right_hand_velocity - prev_velocity["right"]
+
+    # Compute energy as the sum of squared velocities and accelerations
+    left_hand_energy = np.sum(left_hand_velocity**2 + left_hand_acceleration**2)
+    right_hand_energy = np.sum(right_hand_velocity**2 + right_hand_acceleration**2)
+
+    # Update previous frame and velocity
+    prev_velocity["left"] = left_hand_velocity
+    prev_velocity["right"] = right_hand_velocity
+
+    return left_hand_energy, right_hand_energy

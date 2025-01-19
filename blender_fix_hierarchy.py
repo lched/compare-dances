@@ -84,7 +84,7 @@ if __name__ == "__main__":
         global_scale=1,
     )
 
-    INDEX_OF_OBJECT = 1
+    INDEX_OF_OBJECT = 0
     obj_name = bpy.data.objects[INDEX_OF_OBJECT].name
 
     # obj_name = "BadWeed"
