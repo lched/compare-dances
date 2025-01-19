@@ -98,7 +98,7 @@ def load_level(address, *args):
 
 def process_and_send_data(address, *args):
     """Receive data via OSC, compute metrics, and send smoothed results back."""
-    global previous_spec_frame, prev_left_hand_velocity, prev_right_hand_velocity
+    global previous_spec_frame, prev_left_hand_velocity, prev_right_hand_velocitycl
     global spectator_angles_history, left_hand_energy_history, right_hand_energy_history, last_send_time
 
     try:
