@@ -2,7 +2,7 @@
 import math
 import numpy as np
 
-from skeleton_utils import JOINTS_NAMES_TO_IDX
+from skeleton_utils import normalize_skeleton
 
 
 def angle_between_points(A, B, C):
@@ -49,22 +49,43 @@ def are_angles_close(incoming_angles, ref_angles, tolerance=20):
 
 
 def compute_energy_of_ref_file(motion_frames):
-    """Given a temporal array of frames, compute the "energy", which is
-    the absolute value of the acceleration for each frame"""
-    energy = np.zeros(motion_frames.shape[0])
-    for i in range(1, len(motion_frames) - 1):
-        prev_frame = motion_frames[i - 1]
-        curr_frame = motion_frames[i]
-        next_frame = motion_frames[i + 1]
+    """
+    Given a temporal dictionary of motion frames, compute the "energy" for each
+    sequence in the dictionary. The energy is the absolute value of the
+    acceleration for each frame.
 
-        # Compute the acceleration as the difference in velocity
-        velocity1 = curr_frame - prev_frame
-        velocity2 = next_frame - curr_frame
-        acceleration = velocity2 - velocity1
+    Parameters:
+        motion_frames (dict): A dictionary where keys are sequence names
+                              (e.g., "choreography") and values are numpy arrays
+                              of shape (num_frames, num_joints, 3).
 
-        # Sum the absolute value of the acceleration
-        energy[i] = np.mean(np.abs(acceleration)) ** 2
-    return energy
+    Returns:
+        dict: A dictionary where keys are sequence names and values are
+              1D numpy arrays representing the energy for each frame.
+    """
+    ref_energy = {}
+
+    for key, values in motion_frames.items():
+        num_frames = values.shape[0]
+        energy = np.zeros(num_frames)
+
+        for i in range(1, num_frames - 1):
+            prev_frame = values[i - 1]
+            curr_frame = values[i]
+            next_frame = values[i + 1]
+
+            # Compute the acceleration as the difference in velocity
+            velocity1 = curr_frame - prev_frame
+            velocity2 = next_frame - curr_frame
+            acceleration = velocity2 - velocity1
+
+            # Sum the absolute value of the acceleration for all joints and square it
+            energy[i] = np.mean(np.abs(acceleration)) ** 2
+
+        # Store the energy array for the current sequence
+        ref_energy[key] = energy
+    return ref_energy
+
 
 
 def compute_angles(motion_frames, angle_indices):
@@ -90,25 +111,25 @@ def majority_voting(array):
     return num_true >= (len(array) // 2 + 1)
 
 
-def compute_hands_energy(skeleton, prev_frame, prev_velocity):
-    """Compute energy for the left and right hands."""
-    left_hand = skeleton[JOINTS_NAMES_TO_IDX["LeftHand"]]
-    right_hand = skeleton[JOINTS_NAMES_TO_IDX["RightHand"]]
+# def compute_hands_energy(skeleton, prev_frame, prev_velocity):
+#     """Compute energy for the left and right hands."""
+#     left_hand = skeleton[JOINTS_NAMES_TO_IDX["LeftHand"]]
+#     right_hand = skeleton[JOINTS_NAMES_TO_IDX["RightHand"]]
 
-    # Compute velocity (change in position)
-    left_hand_velocity = left_hand - prev_frame[JOINTS_NAMES_TO_IDX["LeftHand"]]
-    right_hand_velocity = right_hand - prev_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
+#     # Compute velocity (change in position)
+#     left_hand_velocity = left_hand - prev_frame[JOINTS_NAMES_TO_IDX["LeftHand"]]
+#     right_hand_velocity = right_hand - prev_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
 
-    # Compute acceleration (change in velocity)
-    left_hand_acceleration = left_hand_velocity - prev_velocity["left"]
-    right_hand_acceleration = right_hand_velocity - prev_velocity["right"]
+#     # Compute acceleration (change in velocity)
+#     left_hand_acceleration = left_hand_velocity - prev_velocity["left"]
+#     right_hand_acceleration = right_hand_velocity - prev_velocity["right"]
 
-    # Compute energy as the sum of squared velocities and accelerations
-    left_hand_energy = np.sum(left_hand_velocity**2 + left_hand_acceleration**2)
-    right_hand_energy = np.sum(right_hand_velocity**2 + right_hand_acceleration**2)
+#     # Compute energy as the sum of squared velocities and accelerations
+#     left_hand_energy = np.sum(left_hand_velocity**2 + left_hand_acceleration**2)
+#     right_hand_energy = np.sum(right_hand_velocity**2 + right_hand_acceleration**2)
 
-    # Update previous frame and velocity
-    prev_velocity["left"] = left_hand_velocity
-    prev_velocity["right"] = right_hand_velocity
+#     # Update previous frame and velocity
+#     prev_velocity["left"] = left_hand_velocity
+#     prev_velocity["right"] = right_hand_velocity
 
-    return left_hand_energy, right_hand_energy
+#     return left_hand_energy, right_hand_energy

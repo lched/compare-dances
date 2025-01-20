@@ -113,7 +113,52 @@ PARENTS = [
 
 
 def normalize_skeleton(skeleton):
-    """Normalize the skeleton for size and position."""
+    """
+    Normalize the skeleton for size and position. Supports both single frames
+    and sequences of frames, as well as dictionaries of sequences.
+
+    Parameters:
+        skeleton (np.ndarray or dict):
+            - A single skeleton frame (shape: (n_joints, 2) or (n_joints, 3)).
+            - A sequence of skeleton frames (shape: (n_frames, n_joints, 2) or
+              (n_frames, n_joints, 3)).
+            - A dictionary where keys are sequence names and values are sequences of frames.
+
+    Returns:
+        np.ndarray or dict:
+            - Normalized skeleton for single frame or sequence.
+            - A dictionary with normalized skeleton sequences if input is a dictionary.
+    """
+    if isinstance(skeleton, dict):
+        # If input is a dictionary, normalize each sequence
+        return {key: normalize_skeleton(value) for key, value in skeleton.items()}
+
+    elif isinstance(skeleton, np.ndarray):
+        if len(skeleton.shape) == 2:
+            # Single frame: (n_joints, 2) or (n_joints, 3)
+            return _normalize_single_frame(skeleton)
+
+        elif len(skeleton.shape) == 3:
+            # Sequence of frames: (n_frames, n_joints, 2) or (n_frames, n_joints, 3)
+            return np.array([_normalize_single_frame(frame) for frame in skeleton])
+
+        else:
+            raise ValueError("Input array must have shape (n_joints, d) or (n_frames, n_joints, d), where d is 2 or 3.")
+
+    else:
+        raise TypeError("Input must be a numpy array or a dictionary of numpy arrays.")
+
+
+def _normalize_single_frame(skeleton):
+    """
+    Normalize a single skeleton frame.
+
+    Parameters:
+        skeleton (np.ndarray): Skeleton frame (shape: (n_joints, 2) or (n_joints, 3)).
+
+    Returns:
+        np.ndarray: Normalized skeleton.
+    """
     root = skeleton[JOINTS_NAMES_TO_IDX["Hips"]]
 
     # Translate so that the root joint is at the origin
@@ -127,3 +172,4 @@ def normalize_skeleton(skeleton):
     skeleton_normalized = skeleton_translated / skeleton_height
 
     return skeleton_normalized
+
