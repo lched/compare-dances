@@ -102,90 +102,91 @@ def process_and_send_data(address, *args):
     global spectator_angles_history, left_hand_energy_history, right_hand_energy_history, last_send_time
 
     try:
-        timestamp = args[-1]  # in ms
-        ref_frame_idx = int(timestamp / REF_FRAMETIME) % len(REF_MOTION)
-        raw_spectator_frame = np.array(args[:-4]).reshape(-1, 3)
-        # Normalize skeleton
-        spectator_frame = normalize_skeleton(raw_spectator_frame)[:, AXES]  # Work in 2D
+        client.send_message("/results", True)
+        # timestamp = args[-1]  # in ms
+        # ref_frame_idx = int(timestamp / REF_FRAMETIME) % len(REF_MOTION)
+        # raw_spectator_frame = np.array(args[:-4]).reshape(-1, 3)
+        # # Normalize skeleton
+        # spectator_frame = normalize_skeleton(raw_spectator_frame)[:, AXES]  # Work in 2D
 
-        # Compute angles
-        spectator_angles = compute_angles(
-            spectator_frame[np.newaxis, :], ANGLES_USED_FOR_SCORE
-        )[0]
+        # # Compute angles
+        # spectator_angles = compute_angles(
+        #     spectator_frame[np.newaxis, :], ANGLES_USED_FOR_SCORE
+        # )[0]
 
-        # Store angles for smoothing
-        spectator_angles_history.append(spectator_angles)
+        # # Store angles for smoothing
+        # spectator_angles_history.append(spectator_angles)
 
-        # Compute velocities for the hands
-        left_hand_pos = spectator_frame[JOINTS_NAMES_TO_IDX["LefttHand"]]
-        right_hand_pos = spectator_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
+        # # Compute velocities for the hands
+        # left_hand_pos = spectator_frame[JOINTS_NAMES_TO_IDX["LeftHand"]]
+        # right_hand_pos = spectator_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
 
-        left_hand_velocity = (
-            left_hand_pos - previous_spec_frame[JOINTS_NAMES_TO_IDX["LefttHand"]]
-        )
-        right_hand_velocity = (
-            right_hand_pos - previous_spec_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
-        )
+        # left_hand_velocity = (
+        #     left_hand_pos - previous_spec_frame[JOINTS_NAMES_TO_IDX["LeftHand"]]
+        # )
+        # right_hand_velocity = (
+        #     right_hand_pos - previous_spec_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
+        # )
 
-        # Compute hand energy
-        left_hand_energy = np.linalg.norm(left_hand_velocity - prev_left_hand_velocity)
-        right_hand_energy = np.linalg.norm(
-            right_hand_velocity - prev_right_hand_velocity
-        )
+        # # Compute hand energy
+        # left_hand_energy = np.linalg.norm(left_hand_velocity - prev_left_hand_velocity)
+        # right_hand_energy = np.linalg.norm(
+        #     right_hand_velocity - prev_right_hand_velocity
+        # )
 
-        # Update previous velocities and frames
-        prev_left_hand_velocity = left_hand_velocity
-        prev_right_hand_velocity = right_hand_velocity
+        # # Update previous velocities and frames
+        # prev_left_hand_velocity = left_hand_velocity
+        # prev_right_hand_velocity = right_hand_velocity
 
-        # Store hand energy values for smoothing
-        left_hand_energy_history.append(left_hand_energy)
-        right_hand_energy_history.append(right_hand_energy)
+        # # Store hand energy values for smoothing
+        # left_hand_energy_history.append(left_hand_energy)
+        # right_hand_energy_history.append(right_hand_energy)
 
-        # Reference angles (average over 1 sec of reference data)
-        ref_angles = np.mean(
-            REF_ANGLES[CURRENT_LEVEL][min(0, ref_frame_idx - 30) : ref_frame_idx]
-        )
+        # # Reference angles (average over 1 sec of reference data)
+        # ref_angles = np.mean(
+        #     REF_ANGLES[CURRENT_LEVEL][min(0, ref_frame_idx - 30) : ref_frame_idx]
+        # )
 
-        current_time = time.time()
-        if current_time - last_send_time >= RESULT_INTERVAL:
-            # Compute the smoothed angles (average over the history)
-            if spectator_angles_history:
-                print("history was...", len(spectator_angles_history))
-                smoothed_spectator_angles = np.mean(spectator_angles_history, axis=0)
+        # current_time = time.time()
+        # if current_time - last_send_time >= RESULT_INTERVAL:
+        #     # Compute the smoothed angles (average over the history)
+        #     if spectator_angles_history:
+        #         print("history was...", len(spectator_angles_history))
+        #         smoothed_spectator_angles = np.mean(spectator_angles_history, axis=0)
 
-                # Get the reference angles for the same time period
-                ref_angles = np.mean(
-                    REF_ANGLES[CURRENT_LEVEL][ref_frame_idx - 30 : ref_frame_idx]
-                )  # average over 1 sec of reference data
+        #         # Get the reference angles for the same time period
+        #         ref_angles = np.mean(
+        #             REF_ANGLES[CURRENT_LEVEL][ref_frame_idx - 30 : ref_frame_idx]
+        #         )  # average over 1 sec of reference data
 
-                # Check if angles are close enough using smoothed spectator angles
-                choreography_valid = majority_voting(
-                    are_angles_close(
-                        smoothed_spectator_angles, ref_angles, ANGLES_TOLERANCE
-                    )
-                )
+        #         # Check if angles are close enough using smoothed spectator angles
+        #         choreography_valid = majority_voting(
+        #             are_angles_close(
+        #                 smoothed_spectator_angles, ref_angles, ANGLES_TOLERANCE
+        #             )
+        #         )
 
-                # Send results back and log
-                client.send_message(
-                    "/results",
-                    {
-                        "choreography_valid": bool(choreography_valid),
-                        "left_hand_energy": left_hand_energy,
-                        "right_hand_energy": right_hand_energy,
-                    },
-                )
-                print("Smoothed Spectator Angles:", smoothed_spectator_angles)
-                print("Reference Angles (averaged):", ref_angles)
-                print("Left Hand Energy:", left_hand_energy)
-                print("Right Hand Energy:", right_hand_energy)
-                print("Choreography Valid:", choreography_valid)
+        #         # Send results back and log
+        #         client.send_message(
+        #             "/results",
+        #             {
+        #                 "choreography_valid": bool(choreography_valid),
+        #                 "left_hand_energy": left_hand_energy,
+        #                 "right_hand_energy": right_hand_energy,
+        #             },
+        #         )
+        #         print("Smoothed Spectator Angles:", smoothed_spectator_angles)
+        #         print("Reference Angles (averaged):", ref_angles)
+        #         print("Left Hand Energy:", left_hand_energy)
+        #         print("Right Hand Energy:", right_hand_energy)
+        #         print("Choreography Valid:", choreography_valid)
 
-                # Reset the spectator angles history
-                spectator_angles_history.clear()
-                left_hand_energy_history.clear()
-                right_hand_energy_history.clear()
+        #         # Reset the spectator angles history
+        #         spectator_angles_history.clear()
+        #         left_hand_energy_history.clear()
+        #         right_hand_energy_history.clear()
 
-            last_send_time = current_time
+        #     last_send_time = current_time
 
     except Exception as e:
         print(f"Error processing data: {e}")
