@@ -63,7 +63,11 @@ def is_hand_position_close(hand_position, ref_positions, threshold=0.1):
     return np.any(distances < threshold)
 
 
-TEMP_INCREMENT = 0
+def mirror_positions(ref_positions):
+    """Mirror the reference positions across the vertical axis (x-axis inversion)."""
+    mirrored_positions = ref_positions.copy()
+    mirrored_positions[:, 0] = -mirrored_positions[:, 0]  # Invert the x-axis
+    return mirrored_positions
 
 
 def process_and_send_data(address, *args):
@@ -74,7 +78,6 @@ def process_and_send_data(address, *args):
         # Parse incoming OSC message
         timestamp = args[-1]  # in ms
         ref_frame_idx = int(timestamp / 24)
-        TEMP_INCREMENT += 1
 
         # Reshape incoming frame and normalize skeleton
         raw_spectator_frame = np.array(args[:-4]).reshape(-1, 3)
@@ -97,27 +100,36 @@ def process_and_send_data(address, *args):
         ref_left_hand_positions = [
             frame[JOINTS_NAMES_TO_IDX["LeftHand"], REFERENCE_XY_AXES]
             for frame in REF_MOTION[CURRENT_LEVEL][
-                max(0, ref_frame_idx - 30) : ref_frame_idx
+                max(0, ref_frame_idx - 45) : ref_frame_idx
             ]
         ]
         ref_right_hand_positions = [
             frame[JOINTS_NAMES_TO_IDX["RightHand"], REFERENCE_XY_AXES]
             for frame in REF_MOTION[CURRENT_LEVEL][
-                max(0, ref_frame_idx - 30) : ref_frame_idx
+                max(0, ref_frame_idx - 45) : ref_frame_idx
             ]
         ]
 
-        ref_left_hand_positions = np.vstack(
-            ref_left_hand_positions
-        )  # Combine all frames into one array
+        ref_left_hand_positions = np.vstack(ref_left_hand_positions)
         ref_right_hand_positions = np.vstack(ref_right_hand_positions)
+
+        # Include mirrored positions for comparison
+        mirrored_left_hand_positions = mirror_positions(ref_left_hand_positions)
+        mirrored_right_hand_positions = mirror_positions(ref_right_hand_positions)
+
+        all_valid_left_positions = np.vstack(
+            (ref_left_hand_positions, mirrored_right_hand_positions)
+        )
+        all_valid_right_positions = np.vstack(
+            (ref_right_hand_positions, mirrored_left_hand_positions)
+        )
 
         # Check if hands are close to any reference positions
         left_hand_valid = is_hand_position_close(
-            left_hand_pos, ref_left_hand_positions, threshold=0.5
+            left_hand_pos, all_valid_left_positions
         )
         right_hand_valid = is_hand_position_close(
-            right_hand_pos, ref_right_hand_positions
+            right_hand_pos, all_valid_right_positions
         )
 
         # Send results at specified intervals
