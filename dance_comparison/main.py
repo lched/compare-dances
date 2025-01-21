@@ -103,13 +103,13 @@ def process_and_send_data(address, *args):
         ref_left_hand_positions = [
             frame[JOINTS_NAMES_TO_IDX["LeftHand"], REFERENCE_XY_AXES]
             for frame in REF_MOTION[CURRENT_LEVEL][
-                max(0, ref_frame_idx - 45) : ref_frame_idx
+                max(0, ref_frame_idx - 30) : ref_frame_idx
             ]
         ]
         ref_right_hand_positions = [
             frame[JOINTS_NAMES_TO_IDX["RightHand"], REFERENCE_XY_AXES]
             for frame in REF_MOTION[CURRENT_LEVEL][
-                max(0, ref_frame_idx - 45) : ref_frame_idx
+                max(0, ref_frame_idx - 30) : ref_frame_idx
             ]
         ]
 
@@ -119,13 +119,14 @@ def process_and_send_data(address, *args):
         # Include mirrored positions for comparison
         mirrored_left_hand_positions = mirror_positions(ref_left_hand_positions)
         mirrored_right_hand_positions = mirror_positions(ref_right_hand_positions)
-
         all_valid_left_positions = np.vstack(
             (ref_left_hand_positions, mirrored_right_hand_positions)
         )
         all_valid_right_positions = np.vstack(
             (ref_right_hand_positions, mirrored_left_hand_positions)
         )
+        left_hand_up = left_hand_pos[1] > 0.25
+        right_hand_up = right_hand_pos[1] > 0.25
 
         # Check if hands are close to any reference positions
         left_hand_valid = is_hand_position_close(
@@ -133,6 +134,7 @@ def process_and_send_data(address, *args):
             all_valid_left_positions,
             threshold=THRESHOLDS[CURRENT_LEVEL][ref_frame_idx],
         )
+
         right_hand_valid = is_hand_position_close(
             right_hand_pos,
             all_valid_right_positions,
