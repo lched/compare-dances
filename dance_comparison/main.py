@@ -126,10 +126,14 @@ def process_and_send_data(address, *args):
 
         # Check if hands are close to any reference positions
         left_hand_valid = is_hand_position_close(
-            left_hand_pos, all_valid_left_positions
+            left_hand_pos,
+            all_valid_left_positions,
+            threshold=THRESHOLDS[CURRENT_LEVEL][ref_frame_idx],
         )
         right_hand_valid = is_hand_position_close(
-            right_hand_pos, all_valid_right_positions
+            right_hand_pos,
+            all_valid_right_positions,
+            threshold=THRESHOLDS[CURRENT_LEVEL][ref_frame_idx],
         )
 
         # Send results at specified intervals
@@ -173,4 +177,40 @@ if __name__ == "__main__":
         "mutation": extract_ref_motion_data("./mutation_dance_fixed.bvh"),
     }
     REF_MOTION = {key: normalize_skeleton(val) for key, val in REF_MOTION.items()}
+
+    # Different thresholds for different
+    choreography_thresholds = np.zeros(REF_MOTION["choreography"].shape[0])
+    # First movement (wave)
+    choreography_thresholds[0:600] *= 2
+    # Second movements
+    choreography_thresholds[600:680] *= 2
+    # Third movement
+    choreography_thresholds[680:985] *= 1.5
+    # Fourth movement (static )
+    choreography_thresholds[680:1400] *= 1
+    # Fifth movement
+    choreography_thresholds[1400:1700] *= 3
+    # Sixth movement
+    choreography_thresholds[1700:1800] *= 1.5
+    # Seventh
+    choreography_thresholds[1800:2000] *= 1.5
+    # Eight
+    choreography_thresholds[2000:2190] *= 1.7
+    # Ninth
+    choreography_thresholds[2190:2278] *= 1.5
+    # Tenth (static)
+    choreography_thresholds[2278:2450] *= 1
+    # 11 (Wave)
+    choreography_thresholds[2450:2680] *= 2.5
+    # 12 recule et saute
+    choreography_thresholds[2680:3030] *= 1.5
+    # 13
+    choreography_thresholds[3030:] *= 2
+
+    # Mutation should be easy
+    mutation_thresholds = np.ones(REF_MOTION["mutation"].shape[0]) * 1
+    THRESHOLDS = {
+        "choreography": choreography_thresholds,
+        "mutation": mutation_thresholds,
+    }
     asyncio.run(main())
