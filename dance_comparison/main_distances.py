@@ -9,15 +9,13 @@ except ModuleNotFoundError:
     )
     import json
 
-import matplotlib.pyplot as plt
 import numpy as np
 from pythonosc.dispatcher import Dispatcher
 from pythonosc.udp_client import SimpleUDPClient
 from pythonosc.osc_server import AsyncIOOSCUDPServer
 
-from skeleton_utils import normalize_skeleton, JOINTS_NAMES_TO_IDX, PARENTS
+from skeleton_utils import normalize_skeleton, JOINTS_NAMES_TO_IDX
 from utils import extract_ref_motion_data, get_orthogonal_indices
-from draw_utils import draw_skeleton
 
 # Which axes are front-up etc. CHANGES for the incoming data depending on initialization
 SPECTATOR_XY_AXES = None
@@ -63,35 +61,25 @@ def is_hand_position_close(hand_position, ref_positions, threshold=0.1):
     return np.any(distances < threshold)
 
 
-TEMP_INCREMENT = 0
-
-
 def process_and_send_data(address, *args):
     """Receive data via OSC, compute metrics, and send results back."""
-    global SPECTATOR_XY_AXES, previous_spec_frame, last_send_time, TEMP_INCREMENT
+    global SPECTATOR_XY_AXES, previous_spec_frame, last_send_time
 
     try:
         # Parse incoming OSC message
         timestamp = args[-1]  # in ms
-        ref_frame_idx = int(timestamp / 24)
-        TEMP_INCREMENT += 1
+        ref_frame_idx = int(timestamp / REF_FRAMETIME) % len(REF_MOTION[CURRENT_LEVEL])
 
         # Reshape incoming frame and normalize skeleton
         raw_spectator_frame = np.array(args[:-4]).reshape(-1, 3)
         spectator_frame = normalize_skeleton(raw_spectator_frame)
         if SPECTATOR_XY_AXES is None:
-            SPECTATOR_XY_AXES = get_orthogonal_indices(
-                spectator_frame[JOINTS_NAMES_TO_IDX["LeftShoulder"]],
-                spectator_frame[JOINTS_NAMES_TO_IDX["RightShoulder"]],
-                spectator_frame[JOINTS_NAMES_TO_IDX["Neck"]],
-                spectator_frame[JOINTS_NAMES_TO_IDX["Hips"]],
-            )
-        spectator_frame = spectator_frame[:, SPECTATOR_XY_AXES]  # Work in 2D
-        # ref_frame = REF_MOTION["choreography"][ref_frame_idx][:, REFERENCE_XY_AXES]
+            SPECTATOR_XY_AXES = REFERENCE_XY_AXES  # Assume axes are predefined
+        spectator_frame_2d = spectator_frame[:, SPECTATOR_XY_AXES]  # Work in 2D
 
         # Get the 2D positions of the spectator's hands
-        left_hand_pos = spectator_frame[JOINTS_NAMES_TO_IDX["LeftHand"]]
-        right_hand_pos = spectator_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
+        left_hand_pos = spectator_frame_2d[JOINTS_NAMES_TO_IDX["LeftHand"]]
+        right_hand_pos = spectator_frame_2d[JOINTS_NAMES_TO_IDX["RightHand"]]
 
         # Get reference positions for the last second
         ref_left_hand_positions = [
@@ -113,20 +101,30 @@ def process_and_send_data(address, *args):
         ref_right_hand_positions = np.vstack(ref_right_hand_positions)
 
         # Check if hands are close to any reference positions
-        left_hand_valid = is_hand_position_close(
-            left_hand_pos, ref_left_hand_positions, threshold=0.5
-        )
+        left_hand_valid = is_hand_position_close(left_hand_pos, ref_left_hand_positions)
         right_hand_valid = is_hand_position_close(
             right_hand_pos, ref_right_hand_positions
         )
 
         # Send results at specified intervals
-        choreography_valid = bool(left_hand_valid and right_hand_valid)
-        client.send_message("/results", choreography_valid)
-        print(f"{timestamp}/{choreography_valid}")
-        # print("Choreography Valid:", choreography_valid)
-        # print("Left Hand Valid:", left_hand_valid)
-        # print("Right Hand Valid:", right_hand_valid)
+        current_time = time.time()
+        if current_time - last_send_time >= RESULT_INTERVAL:
+            choreography_valid = left_hand_valid and right_hand_valid
+
+            client.send_message(
+                "/results",
+                {
+                    "choreography_valid": choreography_valid,
+                    "left_hand_valid": left_hand_valid,
+                    "right_hand_valid": right_hand_valid,
+                },
+            )
+
+            print("Choreography Valid:", choreography_valid)
+            print("Left Hand Valid:", left_hand_valid)
+            print("Right Hand Valid:", right_hand_valid)
+
+            last_send_time = current_time
 
     except Exception as e:
         print(f"Error processing data: {e}")

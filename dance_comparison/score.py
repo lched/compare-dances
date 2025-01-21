@@ -22,30 +22,15 @@ def angle_between_points(A, B, C):
     return angle_degrees
 
 
-def are_angles_close(incoming_angles, ref_angles, tolerance=20):
+def are_angles_close(current_angles, ref_angles_history, tolerance):
     """
-    Check if angles in two arrays are close within a given tolerance.
-
-    Parameters:
-        incoming_angles (array-like): Array of incoming angles in degrees.
-        ref_angles (array-like): Array of reference angles in degrees.
-        tolerance (float): Maximum allowed difference between angles.
-
-    Returns:
-        np.ndarray: Boolean array indicating if angles are close.
+    Compare current angles to all angles in ref_angles_history (last second of reference data).
+    Returns True if any angle in the current frame is within tolerance for any reference frame.
     """
-    # Convert to numpy arrays for element-wise operations
-    incoming_angles = np.array(incoming_angles)
-    ref_angles = np.array(ref_angles)
-
-    # Calculate the absolute difference between angles
-    angle_diff = np.abs(incoming_angles - ref_angles)
-
-    # Adjust for angles that cross the 360° boundary
-    angle_diff = np.minimum(angle_diff, 360 - angle_diff)
-
-    # Check if differences are within the tolerance
-    return angle_diff <= tolerance
+    for ref_angles in ref_angles_history:
+        if np.all(np.abs(current_angles - ref_angles) <= tolerance):
+            return True
+    return False
 
 
 def compute_energy_of_ref_file(motion_frames):
@@ -102,12 +87,12 @@ def compute_angles(motion_frames, angle_indices):
     return angles
 
 
-def majority_voting(array):
-    # Count the number of True values
-    num_true = np.sum(array)
-
-    # Check if it's greater than or equal to half plus one
-    return num_true >= (len(array) // 2 + 1)
+def majority_voting(results):
+    """
+    Apply majority voting over the results list (booleans).
+    Returns True if more than half the results are True.
+    """
+    return sum(results) > len(results) // 2
 
 
 # def compute_hands_energy(skeleton, prev_frame, prev_velocity):
