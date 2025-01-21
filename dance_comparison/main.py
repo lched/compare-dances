@@ -128,21 +128,25 @@ def process_and_send_data(address, *args):
         left_hand_up = left_hand_pos[1] > 0.25
         right_hand_up = right_hand_pos[1] > 0.25
 
-        # Check if hands are close to any reference positions
-        left_hand_valid = is_hand_position_close(
-            left_hand_pos,
-            all_valid_left_positions,
-            threshold=THRESHOLDS[CURRENT_LEVEL][ref_frame_idx],
-        )
+        if not(left_hand_up) and not(right_hand_up):
+            print("Frame ignored, both hands are down")
+            return 0
+        else: # both hands are up
+            # Check if hands are close to any reference positions
+            left_hand_valid = is_hand_position_close(
+                left_hand_pos,
+                all_valid_left_positions,
+                threshold=THRESHOLDS[CURRENT_LEVEL][ref_frame_idx],
+            )
 
-        right_hand_valid = is_hand_position_close(
-            right_hand_pos,
-            all_valid_right_positions,
-            threshold=THRESHOLDS[CURRENT_LEVEL][ref_frame_idx],
-        )
+            right_hand_valid = is_hand_position_close(
+                right_hand_pos,
+                all_valid_right_positions,
+                threshold=THRESHOLDS[CURRENT_LEVEL][ref_frame_idx],
+            )
 
-        # Send results at specified intervals
-        choreography_valid = bool(left_hand_valid and right_hand_valid)
+            # Send results at specified intervals
+            choreography_valid = bool(left_hand_valid and right_hand_valid)
         client.send_message("/results", choreography_valid)
         print(f"{ref_frame_idx}/  {choreography_valid}  /  {THRESHOLDS[CURRENT_LEVEL][ref_frame_idx]}")
         # print("Choreography Valid:", choreography_valid)
