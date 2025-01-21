@@ -76,8 +76,10 @@ def process_and_send_data(address, *args):
 
     try:
         # Parse incoming OSC message
-        timestamp = args[-1]  # in ms
-        ref_frame_idx = int(timestamp / 24)
+        spec_frame_number = args[-1]  # in FRAMES... Reset on end
+        time = spec_frame_number / 24
+        ref_frame_idx = int(time/REF_FRAMETIME)
+        print(ref_frame_idx)
 
         # Reshape incoming frame and normalize skeleton
         raw_spectator_frame = np.array(args[:-4]).reshape(-1, 3)
@@ -90,6 +92,7 @@ def process_and_send_data(address, *args):
                 spectator_frame[JOINTS_NAMES_TO_IDX["Hips"]],
             )
         spectator_frame = spectator_frame[:, SPECTATOR_XY_AXES]  # Work in 2D
+        spectator_frame[:, 0] *= -1
         # ref_frame = REF_MOTION["choreography"][ref_frame_idx][:, REFERENCE_XY_AXES]
 
         # Get the 2D positions of the spectator's hands
@@ -139,7 +142,7 @@ def process_and_send_data(address, *args):
         # Send results at specified intervals
         choreography_valid = bool(left_hand_valid and right_hand_valid)
         client.send_message("/results", choreography_valid)
-        print(f"{timestamp}/{choreography_valid}")
+        print(f"{ref_frame_idx}/  {choreography_valid}  /  {THRESHOLDS[CURRENT_LEVEL][ref_frame_idx]}")
         # print("Choreography Valid:", choreography_valid)
         # print("Left Hand Valid:", left_hand_valid)
         # print("Right Hand Valid:", right_hand_valid)
@@ -179,36 +182,36 @@ if __name__ == "__main__":
     REF_MOTION = {key: normalize_skeleton(val) for key, val in REF_MOTION.items()}
 
     # Different thresholds for different
-    choreography_thresholds = np.zeros(REF_MOTION["choreography"].shape[0])
+    choreography_thresholds = np.ones(REF_MOTION["choreography"].shape[0])
     # First movement (wave)
-    choreography_thresholds[0:600] *= 2
+    choreography_thresholds[0:600] = 0.2
     # Second movements
-    choreography_thresholds[600:680] *= 2
+    choreography_thresholds[600:680] = 0.1
     # Third movement
-    choreography_thresholds[680:985] *= 1.5
+    choreography_thresholds[680:985] = 0.1
     # Fourth movement (static )
-    choreography_thresholds[680:1400] *= 1
+    choreography_thresholds[680:1400] = 0.05
     # Fifth movement
-    choreography_thresholds[1400:1700] *= 3
+    choreography_thresholds[1400:1700] = 0.1
     # Sixth movement
-    choreography_thresholds[1700:1800] *= 1.5
+    choreography_thresholds[1700:1800] = 0.1
     # Seventh
-    choreography_thresholds[1800:2000] *= 1.5
+    choreography_thresholds[1800:2000] = 0.1
     # Eight
-    choreography_thresholds[2000:2190] *= 1.7
+    choreography_thresholds[2000:2190] = 0.1
     # Ninth
-    choreography_thresholds[2190:2278] *= 1.5
+    choreography_thresholds[2190:2278] = 0.1
     # Tenth (static)
-    choreography_thresholds[2278:2450] *= 1
+    choreography_thresholds[2278:2450] = 0.05
     # 11 (Wave)
-    choreography_thresholds[2450:2680] *= 2.5
+    choreography_thresholds[2450:2680] = 0.12
     # 12 recule et saute
-    choreography_thresholds[2680:3030] *= 1.5
+    choreography_thresholds[2680:3030] = 0.1
     # 13
-    choreography_thresholds[3030:] *= 2
+    choreography_thresholds[3030:] *= 0.12
 
     # Mutation should be easy
-    mutation_thresholds = np.ones(REF_MOTION["mutation"].shape[0]) * 1
+    mutation_thresholds = np.ones(REF_MOTION["mutation"].shape[0]) * 0.1
     THRESHOLDS = {
         "choreography": choreography_thresholds,
         "mutation": mutation_thresholds,
