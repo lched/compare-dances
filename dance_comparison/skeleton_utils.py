@@ -143,7 +143,9 @@ def normalize_skeleton(skeleton):
             return np.array([_normalize_single_frame(frame) for frame in skeleton])
 
         else:
-            raise ValueError("Input array must have shape (n_joints, d) or (n_frames, n_joints, d), where d is 2 or 3.")
+            raise ValueError(
+                "Input array must have shape (n_joints, d) or (n_frames, n_joints, d), where d is 2 or 3."
+            )
 
     else:
         raise TypeError("Input must be a numpy array or a dictionary of numpy arrays.")
@@ -172,4 +174,3 @@ def _normalize_single_frame(skeleton):
     skeleton_normalized = skeleton_translated / skeleton_height
 
     return skeleton_normalized
-

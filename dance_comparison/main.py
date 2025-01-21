@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 try:
     import ujson as json
@@ -7,31 +8,34 @@ except ModuleNotFoundError:
         "Warning: ujson library not found, using native json which is much slower and could cause issues."
     )
     import json
-# import threading
 
-# import cv2
 import numpy as np
-import time
 from pythonosc.dispatcher import Dispatcher
 from pythonosc.udp_client import SimpleUDPClient
 from pythonosc.osc_server import AsyncIOOSCUDPServer
 
-# import cv_viewer.tracking_viewer as cv_viewer
 from score import (
     compute_energy_of_ref_file,
     compute_angles,
     are_angles_close,
     majority_voting,
-
 )
-from utils import extract_ref_motion_data, convert_angles_names_to_idx
 from skeleton_utils import normalize_skeleton, JOINTS_NAMES_TO_IDX
+from utils import (
+    extract_ref_motion_data,
+    convert_angles_names_to_idx,
+    get_orthogonal_indices,
+)
 
 
-AXES = [0, 2]
+# Which axes are front up etc CHANGES for the incoming data depending on initialization
+SPECTATOR_XY_AXES = None
+
+# This should be fixed!
+REFERENCE_XY_AXES = [0, 1]
 
 # DIFFICULTY SETTINGS
-ANGLES_TOLERANCE = 20  # in degrees
+ANGLES_TOLERANCE = 30  # in degrees
 
 # OSC
 OSC_PORT = 8080  # PYTHON SERVER PORT
@@ -39,8 +43,9 @@ OSC_CLIENT_PORT = 9001  # UNREAL PORT
 OSC_IP = "127.0.0.1"
 RESULT_INTERVAL = 1  # Interval at which to send results of the analysis (in seconds)
 
-# MISC
+# PARAMETERS
 USE_3D = False  # TODO
+MIRROR = False
 
 # SCORE COMPUTATION
 JOINTS_USED_FOR_ENERGY = ["LEFT_HAND_MIDDLE_4", "RIGHT_HAND_MIDDLE_4"]
@@ -97,6 +102,7 @@ def load_level(address, *args):
 
 def process_and_send_data(address, *args):
     """Receive data via OSC, compute metrics, and send smoothed results back."""
+    global SPECTATOR_XY_AXES
     global previous_spec_frame, prev_left_hand_velocity, prev_right_hand_velocity
     global spectator_angles_history, left_hand_energy_history, right_hand_energy_history, last_send_time
 
@@ -104,10 +110,19 @@ def process_and_send_data(address, *args):
         # Parse incoming OSC message
         timestamp = args[-1]  # in ms
         ref_frame_idx = int(timestamp / REF_FRAMETIME) % len(REF_MOTION)
+        ref_frame = REF_MOTION["choreography"][ref_frame_idx][:, REFERENCE_XY_AXES]
 
         # Reshape incoming frame and normalize skeleton
         raw_spectator_frame = np.array(args[:-4]).reshape(-1, 3)
-        spectator_frame = normalize_skeleton(raw_spectator_frame)[:, AXES]  # Work in 2D
+        spectator_frame = normalize_skeleton(raw_spectator_frame)
+        if SPECTATOR_XY_AXES is None:
+            SPECTATOR_XY_AXES = get_orthogonal_indices(
+                spectator_frame[JOINTS_NAMES_TO_IDX["LeftShoulder"]],
+                spectator_frame[JOINTS_NAMES_TO_IDX["RightShoulder"]],
+                spectator_frame[JOINTS_NAMES_TO_IDX["Neck"]],
+                spectator_frame[JOINTS_NAMES_TO_IDX["Hips"]],
+            )
+        spectator_frame = spectator_frame[:, SPECTATOR_XY_AXES]  # Work in 2D
 
         # Compute angles for the current spectator frame
         spectator_angles = compute_angles(
@@ -128,8 +143,12 @@ def process_and_send_data(address, *args):
         left_hand_pos = spectator_frame[JOINTS_NAMES_TO_IDX["LeftHand"]]
         right_hand_pos = spectator_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
 
-        left_hand_velocity = left_hand_pos - previous_spec_frame[JOINTS_NAMES_TO_IDX["LeftHand"]]
-        right_hand_velocity = right_hand_pos - previous_spec_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
+        left_hand_velocity = (
+            left_hand_pos - previous_spec_frame[JOINTS_NAMES_TO_IDX["LeftHand"]]
+        )
+        right_hand_velocity = (
+            right_hand_pos - previous_spec_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
+        )
 
         # Compute energy using the same method as `compute_energy_of_ref_file`
         left_hand_acceleration = left_hand_velocity - prev_left_hand_velocity
@@ -148,14 +167,16 @@ def process_and_send_data(address, *args):
         previous_spec_frame = spectator_frame
 
         # Reference angles: Compute the average over a window of reference data
-        ref_angles = np.mean(
-            REF_ANGLES[CURRENT_LEVEL][max(0, ref_frame_idx - 30) : ref_frame_idx]
-        )
+        ref_angles = REF_ANGLES[CURRENT_LEVEL][ref_frame_idx]
 
         # Send smoothed results at specified intervals
         current_time = time.time()
         if current_time - last_send_time >= RESULT_INTERVAL:
-            if spectator_angles_history and left_hand_energy_history and right_hand_energy_history:
+            if (
+                spectator_angles_history
+                and left_hand_energy_history
+                and right_hand_energy_history
+            ):
                 # Compute smoothed angles and energy
                 smoothed_spectator_angles = np.mean(spectator_angles_history, axis=0)
                 smoothed_left_hand_energy = np.mean(left_hand_energy_history)
@@ -163,24 +184,27 @@ def process_and_send_data(address, *args):
 
                 # Validate choreography using smoothed angles
                 choreography_valid = majority_voting(
-                    are_angles_close(smoothed_spectator_angles, ref_angles, ANGLES_TOLERANCE)
+                    are_angles_close(
+                        smoothed_spectator_angles, ref_angles, ANGLES_TOLERANCE
+                    )
                 )
 
                 # Send results back and log
                 client.send_message("/results", bool(choreography_valid))
-                # client.send_message(
-                #     "/results",
-                #     {
-                #         "choreography_valid": bool(choreography_valid),
-                #         "left_hand_energy": smoothed_left_hand_energy,
-                #         "right_hand_energy": smoothed_right_hand_energy,
-                #     },
-                # )
-                # print("Smoothed Spectator Angles:", smoothed_spectator_angles)
-                # print("Reference Angles (averaged):", ref_angles)
-                # print("Smoothed Left Hand Energy:", smoothed_left_hand_energy)
-                # print("Smoothed Right Hand Energy:", smoothed_right_hand_energy)
-                # print("Choreography Valid:", choreography_valid)
+                client.send_message(
+                    "/results",
+                    {
+                        "choreography_valid": bool(choreography_valid),
+                        "left_hand_energy": smoothed_left_hand_energy,
+                        "right_hand_energy": smoothed_right_hand_energy,
+                    },
+                )
+                print("Left shoulder", "Left elbow", "Right shoulder", "Right elbow")
+                print("Smoothed Spectator Angles:", smoothed_spectator_angles)
+                print("Reference Angles:", ref_angles)
+                print("Smoothed Left Hand Energy:", smoothed_left_hand_energy)
+                print("Smoothed Right Hand Energy:", smoothed_right_hand_energy)
+                print("Choreography Valid:", choreography_valid)
 
                 # Clear histories after sending
                 spectator_angles_history.clear()
@@ -191,8 +215,6 @@ def process_and_send_data(address, *args):
 
     except Exception as e:
         print(f"Error processing data: {e}")
-
-
 
 
 async def loop():
@@ -230,3 +252,6 @@ if __name__ == "__main__":
     for key, val in REF_MOTION.items():
         REF_ANGLES[key] = compute_angles(val, ANGLES_USED_FOR_SCORE)
     asyncio.run(main())
+
+
+# Ideas to improve: rotate skeleton dynamically so that it's always facing in the right direction to compare

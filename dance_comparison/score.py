@@ -87,7 +87,6 @@ def compute_energy_of_ref_file(motion_frames):
     return ref_energy
 
 
-
 def compute_angles(motion_frames, angle_indices):
     """
     motion_frames shape ()
