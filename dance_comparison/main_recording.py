@@ -70,19 +70,23 @@ def mirror_positions(ref_positions):
     return mirrored_positions
 
 
-# # Initialize global variables for plotting
+# # Initialize global variables for plotting and recording
 # fig, ax = plt.subplots()
 # plt.ion()  # Turn on interactive mode
+
+recorded_frames = []  # List to store recorded frames for saving
 
 
 def process_and_send_data(address, *args):
     """Receive data via OSC, compute metrics, and send results back."""
     global SPECTATOR_XY_AXES, previous_spec_frame, last_send_time, TEMP_INCREMENT
+    global recorded_framesw
 
     try:
         # Parse incoming OSC message
         spec_frame_number = args[-1]  # in FRAMES... Reset on end
-        ref_frame_idx = int(spec_frame_number)
+        time = spec_frame_number / 24
+        ref_frame_idx = int(time / REF_FRAMETIME)
 
         # Reshape incoming frame and normalize skeleton
         raw_spectator_frame = np.array(args[:-4]).reshape(-1, 3)
@@ -97,9 +101,12 @@ def process_and_send_data(address, *args):
         spectator_frame = spectator_frame[:, SPECTATOR_XY_AXES]  # Work in 2D
         spectator_frame[:, 0] *= -1  # Flip x-axis
 
-        ref_frame = REF_MOTION["choreography"][ref_frame_idx][:, REFERENCE_XY_AXES]
+        # Record the frame
+        recorded_frames.append(spectator_frame)
 
-        # Visualization
+        # ref_frame = REF_MOTION["choreography"][ref_frame_idx][:, REFERENCE_XY_AXES]
+
+        # # Visualization
         # ax.clear()  # Clear previous plot
         # draw_skeleton(spectator_frame, PARENTS)  # Draw spectator frame
         # draw_skeleton(ref_frame, PARENTS)  # Draw reference frame
@@ -109,66 +116,65 @@ def process_and_send_data(address, *args):
         # plt.draw()
         # plt.pause(0.001)  # Pause briefly to update the plot
 
-        # Get the 2D positions of the spectator's hands
+        # Additional processing...
         left_hand_pos = spectator_frame[JOINTS_NAMES_TO_IDX["LeftHand"]]
         right_hand_pos = spectator_frame[JOINTS_NAMES_TO_IDX["RightHand"]]
+        print("yes!")
 
-        # Get reference positions for the last second
-        ref_left_hand_positions = [
-            frame[JOINTS_NAMES_TO_IDX["LeftHand"], REFERENCE_XY_AXES]
-            for frame in REF_MOTION[CURRENT_LEVEL][
-                max(0, ref_frame_idx - 30) : ref_frame_idx + 1
-            ]
-        ]
-        ref_right_hand_positions = [
-            frame[JOINTS_NAMES_TO_IDX["RightHand"], REFERENCE_XY_AXES]
-            for frame in REF_MOTION[CURRENT_LEVEL][
-                max(0, ref_frame_idx - 30) : ref_frame_idx + 1
-            ]
-        ]
+        # ref_left_hand_positions = [
+        #     frame[JOINTS_NAMES_TO_IDX["LeftHand"], REFERENCE_XY_AXES]
+        #     for frame in REF_MOTION[CURRENT_LEVEL][
+        #         max(0, ref_frame_idx - 30): ref_frame_idx
+        #     ]
+        # ]
+        # ref_right_hand_positions = [
+        #     frame[JOINTS_NAMES_TO_IDX["RightHand"], REFERENCE_XY_AXES]
+        #     for frame in REF_MOTION[CURRENT_LEVEL][
+        #         max(0, ref_frame_idx - 30): ref_frame_idx
+        #     ]
+        # ]
 
-        ref_left_hand_positions = np.vstack(ref_left_hand_positions)
-        ref_right_hand_positions = np.vstack(ref_right_hand_positions)
+        # ref_left_hand_positions = np.vstack(ref_left_hand_positions)
+        # ref_right_hand_positions = np.vstack(ref_right_hand_positions)
 
-        # Include mirrored positions for comparison
-        mirrored_left_hand_positions = mirror_positions(ref_left_hand_positions)
-        mirrored_right_hand_positions = mirror_positions(ref_right_hand_positions)
-        all_valid_left_positions = np.vstack(
-            (ref_left_hand_positions, mirrored_right_hand_positions)
-        )
-        all_valid_right_positions = np.vstack(
-            (ref_right_hand_positions, mirrored_left_hand_positions)
-        )
+        # mirrored_left_hand_positions = mirror_positions(ref_left_hand_positions)
+        # mirrored_right_hand_positions = mirror_positions(ref_right_hand_positions)
+        # all_valid_left_positions = np.vstack(
+        #     (ref_left_hand_positions, mirrored_right_hand_positions)
+        # )
+        # all_valid_right_positions = np.vstack(
+        #     (ref_right_hand_positions, mirrored_left_hand_positions)
+        # )
 
-        left_hand_up = left_hand_pos[1] > 0.25
-        right_hand_up = right_hand_pos[1] > 0.25
+        # left_hand_valid = is_hand_position_close(
+        #     left_hand_pos,
+        #     all_valid_left_positions,
+        #     threshold=THRESHOLDS[CURRENT_LEVEL][ref_frame_idx],
+        # )
+        # right_hand_valid = is_hand_position_close(
+        #     right_hand_pos,
+        #     all_valid_right_positions,
+        #     threshold=THRESHOLDS[CURRENT_LEVEL][ref_frame_idx],
+        # )
 
-        if not (left_hand_up) and not (right_hand_up):
-            print("Frame ignored, both hands are down")
-            return 0
-        else:  # both hands are up
-            # Check if hands are close to any reference positions
-            left_hand_valid = is_hand_position_close(
-                left_hand_pos,
-                all_valid_left_positions,
-                threshold=THRESHOLDS[CURRENT_LEVEL][ref_frame_idx],
-            )
-
-            right_hand_valid = is_hand_position_close(
-                right_hand_pos,
-                all_valid_right_positions,
-                threshold=THRESHOLDS[CURRENT_LEVEL][ref_frame_idx],
-            )
-
-            # Send results at specified intervals
-            choreography_valid = bool(left_hand_valid and right_hand_valid)
-        client.send_message("/results", choreography_valid)
-        print(
-            f"{ref_frame_idx}/  {choreography_valid}  /  {THRESHOLDS[CURRENT_LEVEL][ref_frame_idx]}"
-        )
+        # choreography_valid = bool(left_hand_valid and right_hand_valid)
+        # client.send_message("/results", choreography_valid)
+        # print(
+        #     f"{ref_frame_idx}/ {choreography_valid} / {THRESHOLDS[CURRENT_LEVEL][ref_frame_idx]}"
+        # )
 
     except Exception as e:
         print(f"Error processing data: {e}")
+
+
+def save_recorded_data(filename="recorded_frames.npy"):
+    """Save the recorded movement data to an .npy file."""
+    global recorded_frames
+    try:
+        np.save(filename, np.array(recorded_frames))
+        print(f"Recorded data saved to {filename}.")
+    except Exception as e:
+        print(f"Error saving data: {e}")
 
 
 async def loop():
@@ -188,8 +194,14 @@ async def main():
     transport, protocol = await server.create_serve_endpoint()
 
     print(f"Server is running on {OSC_IP}:{OSC_PORT}")
-    await loop()
-    transport.close()
+
+    try:
+        await loop()  # Main event loop for your program
+    finally:
+        transport.close()
+        # Save the recorded data before exiting
+        save_recorded_data("my_motion_data.npy")
+        print("Server shut down and recorded data saved.")
 
 
 if __name__ == "__main__":
