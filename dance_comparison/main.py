@@ -35,8 +35,8 @@ RESULT_INTERVAL = 1  # Interval at which to send results of the analysis (in sec
 CURRENT_LEVEL = "choreography"
 REF_FRAMETIME = 1 / 30  # It should not change!!!!!
 REF_MOTION = None
-IDX_TO_LEVEL = {0: "choreography", 1: "mutation_dance"}
-LEVEL_TO_IDX = {"choreography": 0, "mutation_dance": 1}
+IDX_TO_LEVEL = {0: "mutation_dance", 1: "choreography"}
+LEVEL_TO_IDX = {"mutation_dance": 0, "choreography": 1}
 
 # History to compute smoothing
 previous_spec_frame = None
